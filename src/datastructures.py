@@ -18,8 +18,10 @@ class Pair(object):
         '''
         self.t = t
         self.h = h
-        self.entailment = entailment
+        self.t_attribs = {}
+        self.h_attribs = {}
         self.attribs = attribs
+        self.attribs['entailment'] = entailment
         self.annotated_h = None
         self.annotated_t = None
 

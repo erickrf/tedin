@@ -6,12 +6,46 @@ Utility functions
 
 import subprocess
 import os
+import re
 from xml.etree import cElementTree as ET
+from nltk.tokenize import RegexpTokenizer
+from xml.dom import minidom
 import nltk
 import nlpnet
 
 import config
 import datastructures
+
+
+def tokenize_sentence(text, preprocess=True):
+    '''
+    Tokenize the given sentence and applies preprocessing if requested 
+    (conversion to lower case and digit substitution).
+    '''
+    if preprocess:
+        text = re.sub(r'\d', '9', text.lower())
+    
+    tokenizer_regexp = ur'''(?ux)
+    ([^\W\d_]\.)+|                # one letter abbreviations, e.g. E.U.A.
+    \d{1,3}(\.\d{3})*(,\d+)|      # numbers in format 999.999.999,99999
+    \d{1,3}(,\d{3})*(\.\d+)|      # numbers in format 999,999,999.99999
+    \d+:\d+|                      # time and proportions
+    \d+([-\\/]\d+)*|              # dates. 12/03/2012 12-03-2012
+    [DSds][Rr][Aa]?\.|            # common abbreviations such as dr., sr., sra., dra.
+    [Mm]\.?[Ss][Cc]\.?|           # M.Sc. with or without capitalization and dots
+    [Pp][Hh]\.?[Dd]\.?|           # Same for Ph.D.
+    [^\W\d_]{1,2}\$|              # currency
+    (?:(?<=\s)|^)[\#@]\w*[A-Za-z_]+\w*|  # Hashtags and twitter user names
+    -[^\W\d_]+|                   # clitic pronouns with leading hyphen
+    \w+([-']\w+)*|                # words with hyphens or apostrophes, e.g. não-verbal, McDonald's
+    -+|                           # any sequence of dashes
+    \.{3,}|                       # ellipsis or sequences of dots
+    \S                            # any non-space character
+    '''
+    tokenizer = RegexpTokenizer(tokenizer_regexp)
+    
+    return tokenizer.tokenize(text)
+
 
 def read_xml(filename):
     '''
@@ -43,6 +77,33 @@ def read_xml(filename):
         pairs.append(pair)
     
     return pairs
+
+def write_rte_file(filename, pairs, **attribs):
+    '''
+    Write an XML file containing the given RTE pairs.
+    
+    :param pairs: list of Pair objects
+    :parma task: the task attribute in the XML elements
+    '''
+    root = ET.Element('entailment-corpus')
+    for i, pair in enumerate(pairs, 1):
+        xml_attribs = {'id':str(i)}
+        
+        # add any other attributes supplied in the function call or the pair
+        xml_attribs.update(attribs)
+        xml_attribs.update(pair.attribs)
+        
+        xml_pair = ET.SubElement(root, 'pair', xml_attribs)
+        xml_t = ET.SubElement(xml_pair, 't', pair.t_attribs)
+        xml_h = ET.SubElement(xml_pair, 'h', pair.h_attribs)
+        xml_t.text = pair.t.strip()
+        xml_h.text = pair.h.strip()
+        
+    # produz XML com formatação legível (pretty print)
+    xml_string = ET.tostring(root, 'utf-8')
+    reparsed = minidom.parseString(xml_string)
+    with open(filename, 'wb') as f:
+        f.write(reparsed.toprettyxml('    ', '\n', 'utf-8'))
 
 
 def call_corenlp(text):
@@ -81,7 +142,7 @@ def load_nlpnet_tagger():
     Load and return the nlpnet POS tagger.
     Its location in the file system is read from the config module.
     '''
-    return nlpnet.POSTagger(config.nlpnet_path)
+    return nlpnet.POSTagger(config.nlpnet_path_pt)
 
 def tokenize(text):
     """

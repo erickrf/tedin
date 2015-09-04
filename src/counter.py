@@ -25,14 +25,6 @@ def compute_statistics(pairs):
     verbs_t = np.zeros(n)
     verbs_h = np.zeros(n)
     
-    total_sents_t = 0
-    total_sents_h = 0
-    total_tokens_t = 0
-    total_tokens_h = 0
-    total_verbs_t = 0
-    total_verbs_h = 0
-    
-#     tagger = utils.load_senna_tagger()
     tagger = utils.load_nlpnet_tagger()
     
     for i, pair in enumerate(pairs):
@@ -54,25 +46,6 @@ def compute_statistics(pairs):
         
         verbs_t[i] = num_verbs_t
         verbs_h[i] = num_verbs_h
-#         t_sents = utils.tokenize(pair.t)
-#         h_sents = utils.tokenize(pair.h)
-#         
-#         total_sents_t += len(t_sents)
-#         total_sents_h += len(h_sents)
-#         
-#         for sent in t_sents:
-#             verbs = [tag for _, tag in tagger.tag(sent) if tag[0] == 'V']
-#             
-#             total_tokens_t += len(sent)
-#             total_verbs_t += len(verbs)
-#         
-#         for sent in h_sents:
-#             verbs = [tag for _, tag in tagger.tag(sent) if tag[0] == 'V']
-#             
-#             total_tokens_h += len(sent)
-#             total_verbs_h += len(verbs)
-    
-#     num_pairs = float(len(pairs))
     print 'Average followed by std deviation'
     print 'Number for T followed by numbers for H'
     print 'Number of sentences, sentence length and number of verbs'
