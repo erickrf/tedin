@@ -10,6 +10,7 @@ import re
 from xml.etree import cElementTree as ET
 from nltk.tokenize import RegexpTokenizer
 from xml.dom import minidom
+import urllib
 import nltk
 import nlpnet
 
@@ -119,6 +120,21 @@ def call_corenlp(text):
     stdout = p.communicate(text)[0]
     return stdout
 
+
+def call_palavras(text):
+    '''
+    Call a webservice to run the parser Palavras
+    
+    :param text: the text to be parsed, in unicode.
+    :return: the response string from Palavras
+    '''
+    params = {'sentence': text.encode('utf-8')}
+    data = urllib.urlencode(params)
+    f = urllib.urlopen(config.palavras_endpoint, data)
+    response = f.read()
+    f.close()
+    
+    return response
 
 def preprocess(pairs):
     '''
