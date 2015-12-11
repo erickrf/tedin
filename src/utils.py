@@ -4,17 +4,16 @@
 Utility functions
 '''
 
-import subprocess
-import os
 import re
 from xml.etree import cElementTree as ET
 from nltk.tokenize import RegexpTokenizer
 from xml.dom import minidom
-import urllib
+import traceback
+import logging
 import nltk
-import nlpnet
 
 import config
+import external
 import datastructures
 
 
@@ -27,21 +26,22 @@ def tokenize_sentence(text, preprocess=True):
         text = re.sub(r'\d', '9', text.lower())
     
     tokenizer_regexp = ur'''(?ux)
-    ([^\W\d_]\.)+|                # one letter abbreviations, e.g. E.U.A.
-    \d{1,3}(\.\d{3})*(,\d+)|      # numbers in format 999.999.999,99999
-    \d{1,3}(,\d{3})*(\.\d+)|      # numbers in format 999,999,999.99999
-    \d+:\d+|                      # time and proportions
-    \d+([-\\/]\d+)*|              # dates. 12/03/2012 12-03-2012
-    [DSds][Rr][Aa]?\.|            # common abbreviations such as dr., sr., sra., dra.
-    [Mm]\.?[Ss][Cc]\.?|           # M.Sc. with or without capitalization and dots
-    [Pp][Hh]\.?[Dd]\.?|           # Same for Ph.D.
-    [^\W\d_]{1,2}\$|              # currency
-    (?:(?<=\s)|^)[\#@]\w*[A-Za-z_]+\w*|  # Hashtags and twitter user names
-    -[^\W\d_]+|                   # clitic pronouns with leading hyphen
-    \w+([-']\w+)*|                # words with hyphens or apostrophes, e.g. não-verbal, McDonald's
-    -+|                           # any sequence of dashes
-    \.{3,}|                       # ellipsis or sequences of dots
-    \S                            # any non-space character
+    # the order of the patterns is important!!
+    (?:[Mm]\.?[Ss][Cc])\.?|           # M.Sc. with or without capitalization and dots
+    (?:[Pp][Hh]\.?[Dd])\.?|           # Same for Ph.D.
+    (?:[^\W\d_]\.)+|                  # one letter abbreviations, e.g. E.U.A.
+    \d{1,3}(?:\.\d{3})*(?:,\d+)|      # numbers in format 999.999.999,99999
+    \d{1,3}(?:,\d{3})*(?:\.\d+)|      # numbers in format 999,999,999.99999
+    \d+:\d+|                          # time and proportions
+    \d+(?:[-\\/]\d+)*|                # dates. 12/03/2012 12-03-2012
+    (?:[DSds][Rr][Aa]?)\.|            # common abbreviations such as dr., sr., sra., dra.
+    (?:[^\W\d_]){1,2}\$|              # currency
+    (?:[\#@]\w+])|                    # Hashtags and twitter user names
+    -(?:[^\W\d_])+|                   # clitic pronouns with leading hyphen
+    \w+(?:[-']\w+)*|                  # words with hyphens or apostrophes, e.g. não-verbal, McDonald's
+    -+|                               # any sequence of dashes
+    \.{3,}|                           # ellipsis or sequences of dots
+    \S                                # any non-space character
     '''
     tokenizer = RegexpTokenizer(tokenizer_regexp)
     
@@ -63,18 +63,29 @@ def read_xml(filename):
         
         # the entailment relation is expressed differently in some versions
         if 'entailment' in attribs:
-            entailment = attribs['entailment'].lower() in ['yes', 'entailment']
+            ent_string = attribs['entailment'].lower()
             
-            # this is deleted because the Pair object has entailment as an explict argument
-            del attribs['entailment']
-            
+            if ent_string in ['yes', 'entailment']:
+                entailment = datastructures.Entailment.entailment
+            elif ent_string == 'paraphrase':
+                entailment = datastructures.Entailment.paraphrase
+            elif ent_string == 'contradiction':
+                entailment = datastructures.Entailment.contradiction
+            else:
+                entailment = datastructures.Entailment.none
+                        
         elif 'value' in attribs:
-            entailment = attribs['value'].lower() == 'true'
+            if attribs['value'].lower() == 'true':
+                entailment = datastructures.Entailment.entailment
+            else:
+                entailment = datastructures.Entailment.none
             
-            # same as above
-            del attribs['value']
-        
-        pair = datastructures.Pair(t, h, entailment, **attribs)
+        if 'similarity' in attribs:
+            similarity = float(attribs['similarity']) 
+        else:
+            similarity = None
+            
+        pair = datastructures.Pair(t, h, entailment, similarity)
         pairs.append(pair)
     
     return pairs
@@ -106,59 +117,68 @@ def write_rte_file(filename, pairs, **attribs):
     with open(filename, 'wb') as f:
         f.write(reparsed.toprettyxml('    ', '\n', 'utf-8'))
 
-
-def call_corenlp(text):
-    cp = '"%s"' % os.path.join(config.corenlp_path, '*')
-    args = ['java', '-mx3g', '-cp', cp, 
-            'edu.stanford.nlp.pipeline.StanfordCoreNLP',
-            '-annotators', 'tokenize,ssplit,pos,lemma,depparse']
-    
-    # in windows, subprocess call only works using a string instead of a list
-    cmd = ' '.join(args)
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
-                         stderr=subprocess.PIPE)
-    stdout = p.communicate(text)[0]
-    return stdout
-
-
-def call_palavras(text):
+def preprocess_minimal(pairs):
     '''
-    Call a webservice to run the parser Palavras
-    
-    :param text: the text to be parsed, in unicode.
-    :return: the response string from Palavras
+    Apply a minimal preprocessing pipeline.
+    It includes only a tokenizer.
     '''
-    params = {'sentence': text.encode('utf-8')}
-    data = urllib.urlencode(params)
-    f = urllib.urlopen(config.palavras_endpoint, data)
-    response = f.read()
-    f.close()
-    
-    return response
+    for pair in pairs:
+        t = pair.t.lower()
+        tokens = tokenize_sentence(t, False)
+        s = datastructures.Sentence(None)
+        s.tokens = tokens
+        pair.annotated_t = s
+        
+        h = pair.h.lower()
+        tokens = tokenize_sentence(h, False)
+        s = datastructures.Sentence(None)
+        s.tokens = tokens
+        pair.annotated_h = s
 
-def preprocess(pairs):
+def train_classifier(x, y):
+    '''
+    Train and return a classifier with the supplied data
+    '''
+    classifier = config.classifier_class(class_weight='auto')
+    classifier.fit(x, y)
+    
+    return classifier
+
+def train_regressor(x, y):
+    '''
+    Train and return a regression model (for similarity) with the supplied data.
+    '''
+    regressor = config.regressor_class()
+    regressor.fit(x, y)
+    
+    return regressor
+
+def preprocess(pairs, parser='corenlp'):
     '''
     Preprocess the given pairs to add linguistic knowledge.
+    
+    :param parser: which parser to use to preprocess. Allowed values
+        are 'palavras' and 'corenlp'
     '''
+    if parser == 'corenlp':
+        parser_function = external.call_corenlp
+    elif parser == 'palavras':
+        parser_function = external.call_palavras
+    else:
+        raise ValueError('Unknown parser: %s' % parser)
+    
     for i, pair in enumerate(pairs):
-        pair.annotated_t = call_corenlp(pair.t)
-        pair.annotated_h = call_corenlp(pair.h)
+        output_t = parser_function(pair.t)
+        output_h = parser_function(pair.h)
+        try:
+            pair.annotated_t = datastructures.Sentence(output_t, parser)
+            pair.annotated_h = datastructures.Sentence(output_h, parser)
+        except ValueError as e:
+            tb = traceback.format_exc()
+            logging.error('Error reading parser output:', e)
+            logging.error(tb)
+        
         pairs[i] = pair
-
-
-def load_senna_tagger():
-    '''
-    Load and return the SENNA tagger.
-    Its location in the file system is read from the config module.
-    '''
-    return nltk.tag.SennaTagger(config.senna_path)
-
-def load_nlpnet_tagger():
-    '''
-    Load and return the nlpnet POS tagger.
-    Its location in the file system is read from the config module.
-    '''
-    return nlpnet.POSTagger(config.nlpnet_path_pt)
 
 def tokenize(text):
     """
