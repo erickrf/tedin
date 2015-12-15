@@ -8,7 +8,7 @@ import argparse
 import os
 import cPickle
 import sklearn
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, spearmanr
 
 import utils
 import feature_extraction as fe
@@ -40,10 +40,13 @@ def eval_regressor(data_dir, x, y):
     
     predicted = regressor.predict(x)
     pearson = pearsonr(y, predicted)[0] * 100
-    r2 = regressor.score(x, y) * 100
+    spearman = spearmanr(predicted, y)[0] * 100
+    diff = predicted - y
+    mse = (diff ** 2).mean()
     
     print 'Pearson correlation: {:.2f}'.format(pearson)
-    print 'R^2 score: {:.2f}'.format(r2)
+    print 'Spearman correlation (monotonicity): {:.2f}'.format(spearman)
+    print 'Mean Squared Error: {:.2f}'.format(mse)
     
 
 if __name__ == '__main__':
