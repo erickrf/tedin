@@ -10,24 +10,30 @@ import utils
 import datastructures
 import numpy as np
 
+import config
+
 def create_lda_vectors(pairs):
     pass
 
 
-def words_in_common(pair): 
+def words_in_common(pair, stopwords=None): 
     '''
     Return the proportion of words in common in a pair.
     Repeated words are ignored.
     
     :type pair: datastructures.Pair
+    :type stopwords: set
     :return: a tuple with the proportion of common words in the first
         sentence and in the second one
     '''
     tokens_t = pair.annotated_t.tokens
     tokens_h = pair.annotated_h.tokens
     
-    tokens_t = set(tokens_t)
-    tokens_h = set(tokens_h)
+    if stopwords is None:
+        stopwords = set()
+    
+    tokens_t = set(token for token in  tokens_t if token not in stopwords)
+    tokens_h = set(token for token in  tokens_h if token not in stopwords)
     
     num_common_tokens = len(tokens_h.intersection(tokens_t))
     proportion_t = num_common_tokens / len(tokens_t)
@@ -49,6 +55,22 @@ def pipeline_minimal(pairs):
     
     return (x, y, z)
 
+def load_stopwords():
+    '''
+    Load the stopwords from a file set in the config.
+    
+    :return type: set or None
+    '''
+    path = config.stopwords_path
+    if path is None or path == '':
+        return None
+    
+    with open(path, 'rb') as f:
+        text = unicode(f.read(), 'utf-8')
+    
+    stopwords = set(text.splitlines())
+    return stopwords
+
 def extract_features_minimal(pairs):
     '''
     Extract features from the given pairs to be used in a classifier.
@@ -57,7 +79,9 @@ def extract_features_minimal(pairs):
     
     :return: a numpy 2-dim array
     '''
-    features = np.array([words_in_common(pair) for pair in pairs])
+    stopwords = load_stopwords()
+    features = np.array([words_in_common(pair, stopwords) for pair in pairs])
+    
     return features
     
 def extract_classes(pairs):
