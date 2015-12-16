@@ -6,6 +6,9 @@ palavras_endpoint = 'http://143.107.183.175:12680/services/service_palavras_flat
 
 stopwords_path = 'data/stopwords.txt'
 
+# Open Wordnet PT in NT format
+ownpt_path = 'data/own-pt.nt'
+
 lda_path = r'data/lda-100/lda.dat'
 tfidf_path = r'data/lda-100/tfidf.dat'
 tfidf_dict_path = r'data/lda-100/token-dict.dat'
