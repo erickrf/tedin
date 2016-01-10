@@ -20,7 +20,9 @@ def train_models(pairs):
     '''
     Train a classifier with the given pairs
     '''
-    x, y, z = fe.pipeline_minimal(pairs)
+    x = fe.pipeline_minimal(pairs)
+    y = utils.extract_classes(pairs)
+    z = utils.extract_similarities(pairs)
     classifier = utils.train_classifier(x, y)
     regressor = utils.train_regressor(x, z)
     
