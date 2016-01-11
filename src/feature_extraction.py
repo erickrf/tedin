@@ -43,17 +43,14 @@ def words_in_common(pair, stopwords=None):
 
 def pipeline_minimal(pairs):
     '''
-    Process the pairs and return a tuple (x, y, z) with feature representations,
-    entailment classes and similarity scores.
+    Process the pairs and return a vector with feature representations.
     
     The pipeline includes the minimal preprocessing and feature extraction.
     '''
     utils.preprocess_minimal(pairs)
     x = extract_features_minimal(pairs)
-    y = extract_classes(pairs)
-    z = np.array([p.similarity for p in pairs])
     
-    return (x, y, z)
+    return x
 
 def load_stopwords():
     '''
@@ -83,17 +80,6 @@ def extract_features_minimal(pairs):
     features = np.array([words_in_common(pair, stopwords) for pair in pairs])
     
     return features
-    
-def extract_classes(pairs):
-    '''
-    Extract the class infomartion (paraphrase, entailment, none, contradiction)
-    from the pairs. 
-    
-    :return: a numpy array with values from 0 to num_classes - 1
-    '''
-    classes = np.array([pair.entailment.value - 1 for pair in pairs])
-    return classes
-
 
 def negation_check(t, h):
     '''

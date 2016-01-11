@@ -11,6 +11,7 @@ from xml.dom import minidom
 import traceback
 import logging
 import nltk
+import numpy as np
 
 import config
 import external
@@ -47,6 +48,25 @@ def tokenize_sentence(text, preprocess=True):
     
     return tokenizer.tokenize(text)
 
+    
+def extract_classes(pairs):
+    '''
+    Extract the class infomartion (paraphrase, entailment, none, contradiction)
+    from the pairs. 
+    
+    :return: a numpy array with values from 0 to num_classes - 1
+    '''
+    classes = np.array([pair.entailment.value - 1 for pair in pairs])
+    return classes
+
+def extract_similarities(pairs):
+    '''
+    Extract the similarity value from the pairs.
+    
+    :return: a numpy array
+    '''
+    z = np.array([p.similarity for p in pairs])
+    return z
 
 def read_xml(filename):
     '''
