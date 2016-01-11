@@ -26,9 +26,11 @@ def eval_classifier(data_dir, x, y):
     macro_f1 = sklearn.metrics.f1_score(y, predicted, average='macro') * 100
     micro_f1 = sklearn.metrics.f1_score(y, predicted, average='micro') * 100
     
-    print 'Classifier accuracy: {:.2%}'.format(accuracy)
-    print 'Macro F1: {:.2f}'.format(macro_f1)
-    print 'Micro F1: {:.2f}'.format(micro_f1)
+    print 'RTE evaluation'
+    print 'Accuracy\tMicro F1\tMacro F1'
+    print '--------\t--------\t--------'
+    print '{:8.2%}\t{:8.2f}\t{:8.2f}'.format(accuracy, micro_f1, macro_f1)
+    print
 
 def eval_regressor(data_dir, x, y):
     '''
@@ -44,9 +46,10 @@ def eval_regressor(data_dir, x, y):
     diff = predicted - y
     mse = (diff ** 2).mean()
     
-    print 'Pearson correlation: {:.2f}'.format(pearson)
-    print 'Spearman correlation (monotonicity): {:.2f}'.format(spearman)
-    print 'Mean Squared Error: {:.2f}'.format(mse)
+    print 'Similarity evaluation'
+    print 'Pearson   Spearman   Mean Squared Error'
+    print '-------   --------   ------------------'
+    print '{:7.2f}   {:8.2f}   {:18.2f}'.format(pearson, spearman, mse)
     
 
 if __name__ == '__main__':

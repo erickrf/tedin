@@ -16,6 +16,7 @@ tfidf_dict_path = r'data/lda-100/token-dict.dat'
 # URL dentro da rede NILC
 #palavras_endpoint = 'http://10.11.14.126/services/service_palavras_flat.php'
 
+import sklearn
 import sklearn.linear_model as linear
-classifier_class = linear.LogisticRegression
+classifier_class = sklearn.svm.SVC #linear.LogisticRegression
 regressor_class = linear.LinearRegression
