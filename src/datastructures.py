@@ -58,46 +58,64 @@ class Token(object):
     Simple data container class representing a token and its linguistic
     annotations.
     '''
-    def __init__(self, text, pos, lemma):
+    def __init__(self, text, pos, lemma=None):
         self.text = text
         self.pos = pos
         self.lemma = lemma
         self.dependents = []
         self.dependency_relation = None
-        self.head = None
+        # Token.head points to another token, not an index
+        self.head = None 
     
     def __repr__(self):
         repr_str = u'<Token %s (Lemma: %s, POS: %s)>' % (self.text, self.lemma, self.pos)
         return _compat_repr(repr_str)
 
+class ConllPos(object):
+    '''
+    Dummy class to store field positions in a CoNLL-like file
+    for dependency parsing. NB: The positions are different from
+    those used in SRL!
+    '''
+    id = 0
+    word = 1
+    lemma = 2
+    pos = 3
+    pos2 = 4
+    morph = 5
+    dep_head = 6 # dependency head
+    dep_rel = 7 # dependency relation
+
 class Sentence(object):
     '''
     Class to store a sentence with linguistic annotations.
     '''
-    def __init__(self, parser_output, parser='corenlp'):
+    def __init__(self, parser_output, output_format='corenlp'):
         '''
         Initialize a sentence from the output of one of the supported parsers. 
         It checks for the tokens themselves, pos tags, lemmas
         and dependency annotations.
         
         :param parser_output: if None, an empty Sentence object is created.
-        :param parser: either 'corenlp' or 'palavras'
+        :param output_format: 'corenlp', 'palavras' or 'conll'
         '''
         if parser_output is None:
             return
         
-        parser = parser.lower()
+        output_format = output_format.lower()
         self.tokens = []
         
-        if parser == 'corenlp':
+        if output_format == 'corenlp':
             self._read_corenlp_output(parser_output)
-        elif parser == 'palavras':
+        elif output_format == 'palavras':
             self._read_palavras_output(parser_output)
+        elif output_format == 'conll':
+            self._read_conll_output(parser_output)
         else:
-            raise ValueError('Unknown parser: %s' % parser)
+            raise ValueError('Unknown format: %s' % output_format)
     
     def __unicode__(self):
-        return ' '.join(self.tokens)
+        return ' '.join(unicode(t) for t in self.tokens)
     
     def __repr__(self):
         repr_str = unicode(self)
@@ -198,6 +216,44 @@ class Sentence(object):
         head = int(head) - 1
         
         return (head, modifier)
+    
+    def _read_conll_output(self, conll_output):
+        '''
+        Internal function to load data in conll dependency parse syntax.
+        '''
+        lines = conll_output.splitlines()
+        sentence_heads = []
+        
+        for line in lines:
+            fields = line.split()
+            if len(fields) == 0:
+                break
+            
+            word = fields[ConllPos.word]
+            pos = fields[ConllPos.pos]
+            head = int(fields[ConllPos.dep_head])
+            dep_rel = fields[ConllPos.dep_rel]
+            
+            # -1 because tokens are numbered from 1
+            head -= 1
+            
+            token = Token(word, pos)
+            token.dependency_relation = dep_rel
+            
+            self.tokens.append(token)
+            sentence_heads.append(head)
+            
+        # now, set the head of each token
+        for modifier_idx, head_idx in enumerate(sentence_heads):
+            # skip root because its head is -1
+            if head_idx < 0:
+                self.head_index = modifier_idx
+                continue
+            
+            head = self.tokens[head_idx]
+            modifier = self.tokens[modifier_idx]
+            modifier.head = head
+            head.dependents.append(modifier)
     
     def _read_corenlp_output(self, corenlp_output):
         '''
