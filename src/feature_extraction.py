@@ -43,7 +43,7 @@ def words_in_common(pair, stopwords=None):
 
 def pipeline_minimal(pairs):
     '''
-    Process the pairs and return a vector with feature representations.
+    Process the pairs and return a numpy array with feature representations.
     
     The pipeline includes the minimal preprocessing and feature extraction.
     '''
@@ -51,6 +51,14 @@ def pipeline_minimal(pairs):
     x = extract_features_minimal(pairs)
     
     return x
+
+def pipeline_dependency(pairs):
+    '''
+    Process the pairs and return a numpy array with feature representations.
+    
+    The pipeline follows the work of Sharma et al. (2015)
+    '''
+    utils.preprocess_dependency(pairs)
 
 def load_stopwords():
     '''

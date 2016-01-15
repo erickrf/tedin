@@ -18,13 +18,15 @@ import external
 import datastructures
 
 
-def tokenize_sentence(text, preprocess=True):
+def tokenize_sentence(text, change_digits=False):
     '''
-    Tokenize the given sentence and applies preprocessing if requested 
-    (conversion to lower case and digit substitution).
+    Tokenize the given sentence in Portuguese. The tokenization is done in conformity
+    with Universal Treebanks.
+    
+    :param change_digits: if True, replaces all digits with 9.
     '''
-    if preprocess:
-        text = re.sub(r'\d', '9', text.lower())
+    if change_digits:
+        text = re.sub(r'\d', '9', text)
     
     tokenizer_regexp = ur'''(?ux)
     # the order of the patterns is important!!
@@ -36,10 +38,9 @@ def tokenize_sentence(text, preprocess=True):
     \d+:\d+|                          # time and proportions
     \d+(?:[-\\/]\d+)*|                # dates. 12/03/2012 12-03-2012
     (?:[DSds][Rr][Aa]?)\.|            # common abbreviations such as dr., sr., sra., dra.
-    (?:[^\W\d_]){1,2}\$|              # currency
+    \$|                               # currency sign
     (?:[\#@]\w+])|                    # Hashtags and twitter user names
-    -(?:[^\W\d_])+|                   # clitic pronouns with leading hyphen
-    \w+(?:[-']\w+)*|                  # words with hyphens or apostrophes, e.g. não-verbal, McDonald's
+    \w+|                              # words with numbers
     -+|                               # any sequence of dashes
     \.{3,}|                           # ellipsis or sequences of dots
     \S                                # any non-space character
@@ -173,26 +174,33 @@ def train_regressor(x, y):
     
     return regressor
 
-def preprocess(pairs, parser='corenlp'):
+def preprocess_dependency(pairs):
     '''
-    Preprocess the given pairs to add linguistic knowledge.
+    Preprocess the given pairs with a dependency parser.
     
     :param parser: which parser to use to preprocess. Allowed values
-        are 'palavras' and 'corenlp'
+        are 'palavras', 'corenlp' and 'malt'
     '''
-    if parser == 'corenlp':
+    if config.parser == 'corenlp':
         parser_function = external.call_corenlp
-    elif parser == 'palavras':
+        parser_format = 'conll'
+    elif config.parser == 'palavras':
         parser_function = external.call_palavras
+        parser_format = 'palavras'
+    elif config.parser == 'malt':
+        parser_function = external.call_malt
+        parser_format = 'conll'
     else:
-        raise ValueError('Unknown parser: %s' % parser)
+        raise ValueError('Unknown parser: %s' % config.parser)
     
     for i, pair in enumerate(pairs):
-        output_t = parser_function(pair.t)
-        output_h = parser_function(pair.h)
+        # run both at once to save time -- especially important if using a parser server
+        texts = pair.t + '\n\n' + pair.h
+        output = parser_function(texts)
+        output_t, output_h = output.split('\n\n', 1)
         try:
-            pair.annotated_t = datastructures.Sentence(output_t, parser)
-            pair.annotated_h = datastructures.Sentence(output_h, parser)
+            pair.annotated_t = datastructures.Sentence(output_t, parser_format)
+            pair.annotated_h = datastructures.Sentence(output_h, parser_format)
         except ValueError as e:
             tb = traceback.format_exc()
             logging.error('Error reading parser output:', e)

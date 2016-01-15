@@ -5,6 +5,7 @@ Functions for calling external NLP tools.
 '''
 
 import urllib
+import urllib2
 import subprocess
 import os
 import nlpnet
@@ -12,6 +13,7 @@ import nltk
 import tempfile
 
 import config
+import utils
 
 nlpnet_tagger = None
 
@@ -22,7 +24,7 @@ def load_senna_tagger():
     '''
     return nltk.tag.SennaTagger(config.senna_path)
 
-def load_nlpnet_tagger():
+def load_nlpnet_tagger(language='pt'):
     '''
     Load and return the nlpnet POS tagger.
     Its location in the file system is read from the config module.
@@ -32,7 +34,7 @@ def load_nlpnet_tagger():
     if nlpnet_tagger is not None:
         return nlpnet_tagger
     
-    nlpnet_tagger = nlpnet.POSTagger(config.nlpnet_path_pt)
+    nlpnet_tagger = nlpnet.POSTagger(config.nlpnet_path_pt, language=language)
     return nlpnet_tagger
 
 def call_malt(text):
@@ -43,7 +45,8 @@ def call_malt(text):
     :param text: a single sentence
     '''
     nlpnet_tagger = load_nlpnet_tagger()
-    tagged = nlpnet_tagger.tag(text)[0]
+    tokens = utils.tokenize_sentence(text)
+    tagged = nlpnet_tagger.tag_tokens(tokens, return_tokens=True)
     
     # temp files for malt parser input and output
     input_file = tempfile.NamedTemporaryFile(prefix='malt_input.conll',
@@ -58,23 +61,26 @@ def call_malt(text):
             (i, word, '_', tag, tag, '_', '0', 'a', '_', '_')
         input_file.write(input_str.encode("utf8"))
             
-    input_file.write(b'\n\n')
+    input_file.write(b'\n')
     input_file.close()
     
     cmd = ['java' ,
-           '-jar', 'maltparser-1.8.1/maltparser-1.8.1.jar',
-           '-c'  , 'uni-dep-tb-ptbr', 
+           '-jar', config.malt_jar,
+           '-w'  , config.malt_dir,
+           '-c'  , config.malt_model, 
            '-i'  , input_file.name,
            '-o'  , output_file.name, 
            '-m'  , 'parse']
 
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    ret = p.wait()
+    stdout, stderr = p.communicate()
     output_file.close()
     
-    if ret != 0:
-        print 'Return code from MALT parser not 0!'
-        print ret
+    ret_code = p.returncode
+    if ret_code != 0:
+        print 'Return code from MALT parser not 0! Error code {}'.format(ret_code)
+        print stdout
+        print stderr
     
     with open(output_file.name, 'rb') as f:
         output = unicode(f.read(), 'utf-8')
@@ -96,17 +102,23 @@ def call_palavras(text):
     
     return response
 
-
 def call_corenlp(text):
-    cp = '"%s"' % os.path.join(config.corenlp_path, '*')
-    args = ['java', '-mx3g', '-cp', cp, 
-            'edu.stanford.nlp.pipeline.StanfordCoreNLP',
-            '-annotators', 'tokenize,ssplit,pos,lemma,depparse']
+    '''
+    Call Stanford corenlp, which should be running at the address specified in 
+    the config module. The text should already be encoded.
     
-    # in windows, subprocess call only works using a string instead of a list
-    cmd = ' '.join(args)
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
-                         stderr=subprocess.PIPE)
-    stdout = p.communicate(text)[0]
-    return stdout
-
+    Only a dependency parser and POS tagger are run.
+    '''
+    params = {'properties': {"tokenize.whitespace": "true", 
+                             "annotators": "tokenize,pos,depparse",
+                             'depparse.model': config.corenlp_depparse_path,
+                             'pos.model': config.corenlp_pos_path,
+                             "outputFormat": "conllu"}
+              }
+    encoded_params = urllib.urlencode(params)
+    url = '{url}:{port}?{params}'.format(url=config.corenlp_url, 
+                                         port=config.corenlp_port, 
+                                         params=encoded_params)
+    response = urllib2.urlopen(url, text.encode('utf-8'))
+    output = response.read()
+    return output

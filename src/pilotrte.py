@@ -2,10 +2,7 @@
 
 '''
 Simple script for RTE. It extracts a few features from the input
-T and H, following Sharma et al. 2015 (NAACL) and apply supervised
-classification.
-
-This script will train a new model.
+and trains a classifier and regressor models.
 '''
 
 import argparse
@@ -20,13 +17,13 @@ def train_models(pairs):
     '''
     Train a classifier with the given pairs
     '''
-    x = fe.pipeline_minimal(pairs)
-    y = utils.extract_classes(pairs)
-    z = utils.extract_similarities(pairs)
-    classifier = utils.train_classifier(x, y)
-    regressor = utils.train_regressor(x, z)
-    
-    return classifier, regressor
+    x = fe.pipeline_dependency(pairs[:10])
+#     y = utils.extract_classes(pairs)
+#     z = utils.extract_similarities(pairs)
+#     classifier = utils.train_classifier(x, y)
+#     regressor = utils.train_regressor(x, z)
+#     
+#     return classifier, regressor
 
 def save_model(model, dirname, filename):
     '''
@@ -43,10 +40,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     pairs = utils.read_xml(args.input)
-    classifier, regressor = train_models(pairs)
+#     classifier, regressor = train_models(pairs)
+    train_models(pairs)
     
-    save_model(classifier, args.output_dir, 'classifier.dat')
-    save_model(regressor, args.output_dir, 'regressor.dat')
+#     save_model(classifier, args.output_dir, 'classifier.dat')
+#     save_model(regressor, args.output_dir, 'regressor.dat')
 
-    
     

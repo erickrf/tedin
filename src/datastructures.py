@@ -51,7 +51,7 @@ class Pair(object):
         '''
         Return both sentences
         '''
-        return 'T: {}\nH: {}'.format(self.t, self.h)
+        return u'T: {}\nH: {}'.format(self.t, self.h)
 
 class Token(object):
     '''
@@ -68,8 +68,11 @@ class Token(object):
         self.head = None 
     
     def __repr__(self):
-        repr_str = u'<Token %s (Lemma: %s, POS: %s)>' % (self.text, self.lemma, self.pos)
+        repr_str = u'<Token %s>' % self.text
         return _compat_repr(repr_str)
+    
+    def __unicode__(self):
+        return u'<Token %s>' % self.text
 
 class ConllPos(object):
     '''
@@ -262,7 +265,7 @@ class Sentence(object):
         # ignore the first two lines (they contain the number of tokens and the sentence)
         lines = corenlp_output.splitlines()[2:]
         
-        token_regex = r'Text=(.+) CharacterOffsetBegin.+ PartOfSpeech=(.+) Lemma=(.+)\]'
+        token_regex = r'Text=(.+) CharacterOffsetBegin.+ PartOfSpeech=(.+)\]'
         dependency_regex = r'(\w+)\(.+-(\d+), .+-(\d+)\)'
         for line in lines:
             if line.strip() == '':
@@ -270,8 +273,8 @@ class Sentence(object):
                 
             elif line.startswith('['):
                 match = re.search(token_regex, line)
-                text, pos, lemma = match.groups()
-                token = Token(text, pos, lemma)
+                text, pos = match.groups()
+                token = Token(text, pos)
                 self.tokens.append(token)
             
             else:
@@ -292,5 +295,6 @@ class Sentence(object):
                     head = self.tokens[head_num]
                     modifier.head = head
                     head.dependents.append(modifier)
+                else:
                     self.root = modifier
         
