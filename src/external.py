@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import unicode_literals
+
 '''
 Functions for calling external NLP tools.
 '''
 
 import urllib
-import urllib2
 import subprocess
-import os
 import nlpnet
 import nltk
 import tempfile
+import json
 
 import config
 import utils
@@ -109,16 +110,25 @@ def call_corenlp(text):
     
     Only a dependency parser and POS tagger are run.
     '''
-    params = {'properties': {"tokenize.whitespace": "true", 
-                             "annotators": "tokenize,pos,depparse",
-                             'depparse.model': config.corenlp_depparse_path,
-                             'pos.model': config.corenlp_pos_path,
-                             "outputFormat": "conllu"}
-              }
+    properties = {'tokenize.whitespace': 'true', 
+                  'annotators': 'tokenize,ssplit,pos,depparse',
+                  'depparse.model': config.corenlp_depparse_path,
+                  'pos.model': config.corenlp_pos_path,
+                  'outputFormat': 'conllu'}
+    
+    # use json dumps function to convert the nested dictionary to a string
+    properties_val = json.dumps(properties)
+    params = {'properties': properties_val}
+    
     encoded_params = urllib.urlencode(params)
-    url = '{url}:{port}?{params}'.format(url=config.corenlp_url, 
+    url = '{url}:{port}/?{params}'.format(url=config.corenlp_url, 
                                          port=config.corenlp_port, 
                                          params=encoded_params)
-    response = urllib2.urlopen(url, text.encode('utf-8'))
+    
+    # TODO: apparently, this is a bug in the CoreNLP server on handling UTF-8 data. 
+    # See https://github.com/stanfordnlp/CoreNLP/issues/125
+    # if the bug is fixed, this should be changed to utf-8  
+    response = urllib.urlopen(url, text.encode('latin1'))
     output = response.read()
-    return output
+    
+    return unicode(output, 'latin1')
