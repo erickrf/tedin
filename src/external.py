@@ -12,6 +12,7 @@ import nlpnet
 import nltk
 import tempfile
 import json
+import requests
 
 import config
 import utils
@@ -120,15 +121,14 @@ def call_corenlp(text):
     properties_val = json.dumps(properties)
     params = {'properties': properties_val}
     
+    # we encode the URL params using urllib because we need a URL with GET parameters
+    # even though we are making a POST request. The POST data is the text itself.
     encoded_params = urllib.urlencode(params)
     url = '{url}:{port}/?{params}'.format(url=config.corenlp_url, 
                                          port=config.corenlp_port, 
                                          params=encoded_params)
     
-    # TODO: apparently, this is a bug in the CoreNLP server on handling UTF-8 data. 
-    # See https://github.com/stanfordnlp/CoreNLP/issues/125
-    # if the bug is fixed, this should be changed to utf-8  
-    response = urllib.urlopen(url, text.encode('latin1'))
-    output = response.read()
+    headers = {'Content-Type': 'text/plain;charset=utf-8'}
+    response = requests.post(url, text.encode('utf-8'), headers=headers)
     
-    return unicode(output, 'latin1')
+    return response.text
