@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import unicode_literals
+
 '''
 Utility functions
 '''
@@ -10,7 +12,6 @@ from nltk.tokenize import RegexpTokenizer
 from xml.dom import minidom
 import traceback
 import logging
-import nltk
 import numpy as np
 
 import config
@@ -195,9 +196,12 @@ def preprocess_dependency(pairs):
     
     for i, pair in enumerate(pairs):
         # run both at once to save time -- especially important if using a parser server
-        texts = pair.t + '\n\n' + pair.h
+        tokens_t = tokenize_sentence(pair.t)
+        tokens_h = tokenize_sentence(pair.h)
+        texts = '{}\n\n{}'.format(' '.join(tokens_t), ' '.join(tokens_h))
         output = parser_function(texts)
         output_t, output_h = output.split('\n\n', 1)
+        
         try:
             pair.annotated_t = datastructures.Sentence(output_t, parser_format)
             pair.annotated_h = datastructures.Sentence(output_h, parser_format)
@@ -208,12 +212,3 @@ def preprocess_dependency(pairs):
         
         pairs[i] = pair
 
-def tokenize(text):
-    """
-    Return a list of lists of the tokens in the text. One list for each 
-    sentence.
-    """
-    sent_tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
-    tokenizer = nltk.tokenize.TreebankWordTokenizer()
-    return [tokenizer.tokenize(sent)
-            for sent in sent_tokenizer.tokenize(text)]
