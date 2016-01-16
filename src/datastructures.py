@@ -124,6 +124,19 @@ class Sentence(object):
         repr_str = unicode(self)
         return _compat_repr(repr_str)
     
+    def structure_representation(self):
+        '''
+        Print a CoNLL-like representation of the sentence's syntactic structure.
+        '''
+        lines = []
+        for token in self.tokens:
+            head = token.head.text if token.head is not None else 'root'
+            line = '{token.text}\t\t{token.pos}\t\t{head}\t\t{token.dependency_relation}'
+            line = line.format(token=token, head=head)
+            lines.append(line)
+        
+        return '\n'.join(lines)
+    
     def _read_palavras_output(self, palavras_output):
         '''
         Internal function to load data from the output of the Palavras parser for Portuguese.
@@ -234,6 +247,10 @@ class Sentence(object):
             
             word = fields[ConllPos.word]
             pos = fields[ConllPos.pos]
+            if pos == '_':
+                # some systems output the POS tag in the second column
+                pos = fields[ConllPos.pos2]
+                
             head = int(fields[ConllPos.dep_head])
             dep_rel = fields[ConllPos.dep_rel]
             
@@ -250,7 +267,7 @@ class Sentence(object):
         for modifier_idx, head_idx in enumerate(sentence_heads):
             # skip root because its head is -1
             if head_idx < 0:
-                self.head_index = modifier_idx
+                self.root = self.tokens[modifier_idx]
                 continue
             
             head = self.tokens[head_idx]
