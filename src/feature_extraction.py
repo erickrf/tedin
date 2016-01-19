@@ -94,17 +94,16 @@ def negation_check(t, h):
      Check if a verb from H is negated in T. Negation is understood both as the
      verb itself negated by an adverb such as not or never, or by the presence
      of a non-negated antonym.
+     
      :type t: datastructures.Sentence
      :type h: datastructures.Sentence
      :return: 1 for negation, 0 otherwise
     '''
-    # TODO: the POS check is based on the penn treebank tagset. we could make it more general
-    verb_lemmas_h = set(token.lemma
-                        for token in h
-                        if token.pos[0] == 'V')
-    verbs_t = set(token
-                  for token in t
-                  if token.pos[0] == 'V' and token.lemma in verb_lemmas_h)
+    # the POS check is based on the Universal Treebanks tagset
+    verbs_h = [token for token in h.tokens
+               if token.pos == 'VERB']
+    verbs_t = [token for token in t.tokens
+               if token.pos == 'VERB']
     
     #TODO: add synonyms to verbs from H
     for verb in verbs_t:
