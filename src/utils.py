@@ -19,21 +19,26 @@ import external
 import datastructures
 
 
-def tokenize_sentence(text, change_digits=False):
+def tokenize_sentence(text, change_quotes=True, change_digits=False):
     '''
     Tokenize the given sentence in Portuguese. The tokenization is done in conformity
     with Universal Treebanks.
     
+    :param change_quotes: if True, change different kinds of quotation marks to "
     :param change_digits: if True, replaces all digits with 9.
     '''
     if change_digits:
         text = re.sub(r'\d', '9', text)
+    
+    if change_quotes:
+        text = text.replace('“', '"').replace('”', '"')
     
     tokenizer_regexp = ur'''(?ux)
     # the order of the patterns is important!!
     (?:[Mm]\.?[Ss][Cc])\.?|           # M.Sc. with or without capitalization and dots
     (?:[Pp][Hh]\.?[Dd])\.?|           # Same for Ph.D.
     (?:[^\W\d_]\.)+|                  # one letter abbreviations, e.g. E.U.A.
+    \w+|                              # words with numbers (including hours)
     \d{1,3}(?:\.\d{3})*(?:,\d+)|      # numbers in format 999.999.999,99999
     \d{1,3}(?:,\d{3})*(?:\.\d+)|      # numbers in format 999,999,999.99999
     \d+:\d+|                          # time and proportions
@@ -41,7 +46,6 @@ def tokenize_sentence(text, change_digits=False):
     (?:[DSds][Rr][Aa]?)\.|            # common abbreviations such as dr., sr., sra., dra.
     \$|                               # currency sign
     (?:[\#@]\w+])|                    # Hashtags and twitter user names
-    \w+|                              # words with numbers
     -+|                               # any sequence of dashes
     \.{3,}|                           # ellipsis or sequences of dots
     \S                                # any non-space character

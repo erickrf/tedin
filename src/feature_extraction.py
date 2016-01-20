@@ -6,10 +6,11 @@ machine learning algorithms.
 '''
 
 from __future__ import division
+import numpy as np
+from operator import xor
+
 import utils
 import datastructures
-import numpy as np
-
 import config
 
 def create_lda_vectors(pairs):
@@ -89,6 +90,20 @@ def extract_features_minimal(pairs):
     
     return features
 
+def is_negated(verb):
+    '''
+    Check if a verb is negated in the syntactic tree. This function searches its
+    direct syntactic children for a negation relation. 
+    
+    :type verb: datastructures.Token
+    :return: bool
+    '''
+    for dependent in verb.dependents:
+        if dependent.dependency_relation == config.negation_rel:
+            return True
+    
+    return False
+
 def negation_check(t, h):
     '''
      Check if a verb from H is negated in T. Negation is understood both as the
@@ -105,13 +120,17 @@ def negation_check(t, h):
     verbs_t = [token for token in t.tokens
                if token.pos == 'VERB']
     
-    #TODO: add synonyms to verbs from H
-    for verb in verbs_t:
-        # check if it is negated
-        dependents = verb.dependents
-        for dependent in dependents:
-            if dependent.dependency_relation == 'neg':
-                return 1
-    
+    for verb_t in verbs_t:
+        # check if it is in H
+        #TODO: also check synonyms
+        # we do a linear search instead of using a set, yes
+        # the overhead of creating a set to check 1-4 verbs is not worth it
+        for verb_h in verbs_h:
+            if verb_t.lemma == verb_h.lemma:
+                t_negated = is_negated(verb_t)
+                h_negated = is_negated(verb_h)
+                if xor(t_negated, h_negated):
+                    return 1
+                
     return 0
 

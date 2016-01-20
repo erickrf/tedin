@@ -9,6 +9,8 @@ import re
 import six
 from enum import Enum
 
+import resources
+
 def _compat_repr(repr_string, encoding='utf-8'):
     '''
     Function to provide compatibility with Python 2 and 3 with the __repr__
@@ -126,16 +128,28 @@ class Sentence(object):
     
     def structure_representation(self):
         '''
-        Print a CoNLL-like representation of the sentence's syntactic structure.
+        Return a CoNLL-like representation of the sentence's syntactic structure.
         '''
         lines = []
         for token in self.tokens:
             head = token.head.text if token.head is not None else 'root'
-            line = '{token.text}\t\t{token.pos}\t\t{head}\t\t{token.dependency_relation}'
-            line = line.format(token=token, head=head)
+            lemma = token.lemma if token.lemma is not None else '_'
+            line = '{token.text}\t\t{lemma}\t\t{token.pos}\t\t{head}\t\t{token.dependency_relation}'
+            line = line.format(token=token, lemma=lemma, head=head)
             lines.append(line)
         
         return '\n'.join(lines)
+    
+    def find_lemmas(self):
+        '''
+        Find the lemmas for all tokens in the sentence.
+        '''
+        pos_to_check = ['NOUN', 'VERB', 'ADJ']
+        for token in self.tokens:
+            if token.pos in pos_to_check:
+                token.lemma = resources.get_lemma(token.text, token.pos)
+            else:
+                token.lemma = token.text
     
     def _read_palavras_output(self, palavras_output):
         '''
@@ -250,6 +264,10 @@ class Sentence(object):
             if pos == '_':
                 # some systems output the POS tag in the second column
                 pos = fields[ConllPos.pos2]
+            
+            lemma = fields[ConllPos.lemma]
+            if lemma == '_':
+                lemma = resources.get_lemma(word, pos)
                 
             head = int(fields[ConllPos.dep_head])
             dep_rel = fields[ConllPos.dep_rel]
@@ -257,7 +275,7 @@ class Sentence(object):
             # -1 because tokens are numbered from 1
             head -= 1
             
-            token = Token(word, pos)
+            token = Token(word, pos, lemma)
             token.dependency_relation = dep_rel
             
             self.tokens.append(token)
@@ -291,7 +309,8 @@ class Sentence(object):
             elif line.startswith('['):
                 match = re.search(token_regex, line)
                 text, pos = match.groups()
-                token = Token(text, pos)
+                lemma = resources.get_lemma(text, pos)
+                token = Token(text, pos, lemma)
                 self.tokens.append(token)
             
             else:

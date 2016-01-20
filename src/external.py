@@ -107,7 +107,8 @@ def call_palavras(text):
 def call_corenlp(text):
     '''
     Call Stanford corenlp, which should be running at the address specified in 
-    the config module. The text should already be encoded.
+    the config module. The text should be already tokenized with tokens separated 
+    by whitespace.
     
     Only a dependency parser and POS tagger are run.
     '''
@@ -131,4 +132,7 @@ def call_corenlp(text):
     headers = {'Content-Type': 'text/plain;charset=utf-8'}
     response = requests.post(url, text.encode('utf-8'), headers=headers)
     
-    return response.text
+    # bug: stanford corenlp returns a latin1 string when we supply it with utf-8
+    output = unicode(response.content, 'latin1')
+    
+    return output
