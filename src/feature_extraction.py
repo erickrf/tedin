@@ -7,6 +7,7 @@ machine learning algorithms.
 
 from __future__ import division
 import numpy as np
+import logging
 from operator import xor
 
 import utils
@@ -42,14 +43,14 @@ def words_in_common(pair, stopwords=None):
     
     return (proportion_t, proportion_h)
 
-def pipeline_minimal(pairs):
+def pipeline_minimal(pairs, model_config):
     '''
     Process the pairs and return a numpy array with feature representations.
     
     The pipeline includes the minimal preprocessing and feature extraction.
     '''
     utils.preprocess_minimal(pairs)
-    x = extract_features_minimal(pairs)
+    x = extract_features_minimal(pairs, model_config)
     
     return x
 
@@ -61,14 +62,19 @@ def pipeline_dependency(pairs):
     '''
     utils.preprocess_dependency(pairs)
 
-def load_stopwords():
+def load_stopwords(path=None):
     '''
-    Load the stopwords from a file set in the config.
+    Load the stopwords from a file.
     
+    :param path: the file containing stopwords. If None, the default
+        from global configuration is read.
     :return type: set or None
     '''
-    path = config.stopwords_path
+    if path is None:
+        path = config.stopwords_path
+        
     if path is None or path == '':
+        logging.warning('No stopword file set. Stopwords won\'t be treated.')
         return None
     
     with open(path, 'rb') as f:
@@ -77,7 +83,7 @@ def load_stopwords():
     stopwords = set(text.splitlines())
     return stopwords
 
-def extract_features_minimal(pairs):
+def extract_features_minimal(pairs, model_config):
     '''
     Extract features from the given pairs to be used in a classifier.
     
@@ -85,7 +91,7 @@ def extract_features_minimal(pairs):
     
     :return: a numpy 2-dim array
     '''
-    stopwords = load_stopwords()
+    stopwords = load_stopwords(model_config.stopwords_path)
     features = np.array([words_in_common(pair, stopwords) for pair in pairs])
     
     return features

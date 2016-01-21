@@ -1,8 +1,15 @@
+# -*- coding: utf-8 -*-
 
-#
+from __future__ import unicode_literals
+
+'''
+This is the global configuration file. It contains configurations for resources
+and external tools that are shared by all configurations.
+'''
+
+# ==============
 # Parsing config
-# ##############
-#
+# ==============
 
 # this must be one of corenlp, palavras or malt
 parser = 'corenlp'
@@ -25,20 +32,19 @@ malt_model = 'uni-dep-tb-ptbr'
 # label of the dependency relation indicating negation 
 negation_rel = 'neg'
 
-#
+# =============
 # Tagger config
-# #############
+# =============
 #
 
 senna_path = r'D:\ferramentas\senna'
 nlpnet_path_en = r'D:/desenvolvimento/nlpnet/data/dependency'
 
-#
+# ========================
 # Lexical resources config
-# ########################
-#
+# ========================
 
-stopwords_path = 'data/stopwords.txt'
+stopwords_path = None
 
 # Open Wordnet PT in NT format
 ownpt_path = 'data/own-pt.nt'
@@ -49,12 +55,13 @@ tfidf_dict_path = r'data/lda-100/token-dict.dat'
 
 unitex_dictionary_path = 'data/Delaf2015v04.dic'
 
-#
-# Machine learning algorithms config
-# ##################################
-#
 
-import sklearn
-import sklearn.linear_model as linear
-classifier_class = sklearn.svm.SVC #linear.LogisticRegression
-regressor_class = linear.LinearRegression
+
+# # ==================================
+# # Machine learning algorithms config
+# # ==================================
+# 
+# import sklearn
+# import sklearn.linear_model as linear
+# classifier_class = sklearn.svm.SVC #linear.LogisticRegression
+# regressor_class = linear.LinearRegression

@@ -8,10 +8,10 @@ import argparse
 import os
 import cPickle
 import sklearn
+import importlib
 from scipy.stats import pearsonr, spearmanr
 
 import utils
-import feature_extraction as fe
 
 def eval_classifier(data_dir, x, y):
     '''
@@ -56,14 +56,20 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('input', help='Directory with trained model')
     parser.add_argument('test_file', help='File with test data')
+    parser.add_argument('configuration', 
+                        help='Python file with system configuration (must be'\
+                        'inside "configurations" directory)')
     parser.add_argument('-c', help='Evaluate entailment classifier', action='store_true',
                         dest='classifier')
     parser.add_argument('-r', help='Evaluate similarity regressor', action='store_true',
                         dest='regressor')
     args = parser.parse_args()
 
+    module_full_name = 'configurations.{}'.format(args.configuration)
+    model_config = importlib.import_module(module_full_name)
+    
     pairs = utils.read_xml(args.test_file)
-    x = fe.pipeline_minimal(pairs)
+    x = model_config.extract_features(pairs, model_config)
     y = utils.extract_classes(pairs)
     z = utils.extract_similarities(pairs)
     
