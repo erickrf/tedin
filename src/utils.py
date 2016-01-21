@@ -22,7 +22,7 @@ import datastructures
 def tokenize_sentence(text, change_quotes=True, change_digits=False):
     '''
     Tokenize the given sentence in Portuguese. The tokenization is done in conformity
-    with Universal Treebanks.
+    with Universal Treebanks (at least it attempts so).
     
     :param change_quotes: if True, change different kinds of quotation marks to "
     :param change_digits: if True, replaces all digits with 9.
@@ -35,19 +35,17 @@ def tokenize_sentence(text, change_quotes=True, change_digits=False):
     
     tokenizer_regexp = ur'''(?ux)
     # the order of the patterns is important!!
-    (?:[Mm]\.?[Ss][Cc])\.?|           # M.Sc. with or without capitalization and dots
-    (?:[Pp][Hh]\.?[Dd])\.?|           # Same for Ph.D.
     (?:[^\W\d_]\.)+|                  # one letter abbreviations, e.g. E.U.A.
-    \w+|                              # words with numbers (including hours)
-    \d{1,3}(?:\.\d{3})*(?:,\d+)|      # numbers in format 999.999.999,99999
-    \d{1,3}(?:,\d{3})*(?:\.\d+)|      # numbers in format 999,999,999.99999
+    \d+(?:[.,]\d+)*(?:[.,]\d+)|       # numbers in format 999.999.999,99999
+    \.{3,}|                           # ellipsis or sequences of dots
+    \w+(?:\.(?!\.|$))?|               # words with numbers (including hours as 12h30), 
+                                      # followed by a single dot but not at the end of sentence
     \d+:\d+|                          # time and proportions
     \d+(?:[-\\/]\d+)*|                # dates. 12/03/2012 12-03-2012
     (?:[DSds][Rr][Aa]?)\.|            # common abbreviations such as dr., sr., sra., dra.
     \$|                               # currency sign
     (?:[\#@]\w+])|                    # Hashtags and twitter user names
     -+|                               # any sequence of dashes
-    \.{3,}|                           # ellipsis or sequences of dots
     \S                                # any non-space character
     '''
     tokenizer = RegexpTokenizer(tokenizer_regexp)
