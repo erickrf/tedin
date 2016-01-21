@@ -7,7 +7,7 @@ Configuration for the RTE system based only on word overlap.
 import feature_extraction as fe
 
 extract_features = fe.pipeline_minimal
-stopwords_path = None
+stopwords_path = 'data/stopwords.txt'
 
 # ==================================
 # Machine learning algorithms config
