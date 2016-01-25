@@ -16,6 +16,7 @@ import numpy as np
 
 import config
 import external
+import numbers
 import datastructures
 
 
@@ -52,7 +53,39 @@ def tokenize_sentence(text, change_quotes=True, change_digits=False):
     
     return tokenizer.tokenize(text)
 
+def find_lexical_alignments(pair):
+    '''
+    Find the lexical alignments in the pair and write them to a variable
+    `lexical_alignments` in `pair`.
     
+    Lexical alignments are simply two equal or synonym words.
+    
+    :type pair: datastructures.Pair
+    '''
+    # pronouns aren't content words, but let's pretend they are
+    content_word_tags = set(['NOUN', 'VERB', 'PRON', 'ADJ', 'ADV', 'PNOUN'])
+    content_words_t = [token
+                       for token in pair.annotated_t.tokens
+                       if token.pos in content_word_tags]
+    content_words_h = [token
+                       for token in pair.annotated_h.tokens
+                       if token.pos in content_word_tags]
+    
+    pair.lexical_alignments = []
+    
+    for token in pair.annotated_t.tokens:
+        token.aligned_to = []
+    for token in pair.annotated_h.tokens:
+        token.aligned_to = []
+    
+    for token_t in content_words_t:
+        for token_h in content_words_h:
+            # TODO: check synonyms
+            if token_t.lemma == token_h.lemma:
+                pair.lexical_alignments.append((token_t, token_h))
+                token_t.aligned_to.append(token_h)
+                token_h.aligned_to.append(token_t)
+
 def extract_classes(pairs):
     '''
     Extract the class infomartion (paraphrase, entailment, none, contradiction)
@@ -108,8 +141,9 @@ def read_xml(filename):
             similarity = float(attribs['similarity']) 
         else:
             similarity = None
-            
-        pair = datastructures.Pair(t, h, entailment, similarity)
+        
+        id_ = int(attribs['id'])
+        pair = datastructures.Pair(t, h, id_, entailment, similarity)
         pairs.append(pair)
     
     return pairs

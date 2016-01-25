@@ -34,14 +34,15 @@ class Pair(object):
     Class representing a pair of texts from SICK or RTE.
     It is meant to be used as an abstract representation for both.
     '''
-    def __init__(self, t, h, entailment, similarity=None):
+    def __init__(self, t, h, id_, entailment, similarity=None):
         '''
         :param entailment: boolean
         :param attribs: extra attributes to be written to the XML
         '''
         self.t = t
         self.h = h
-        
+        self.id = id_
+        self.lexical_alignments = None
         self.entailment = entailment
         self.annotated_h = None
         self.annotated_t = None
