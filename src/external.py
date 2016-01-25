@@ -135,4 +135,7 @@ def call_corenlp(text):
     # bug: stanford corenlp returns a latin1 string when we supply it with utf-8
     output = unicode(response.content, 'latin1')
     
+    # bug 2: for some reason, sometimes the output comes with some \0 chars
+    output = output.replace('\0', '')
+    
     return output
