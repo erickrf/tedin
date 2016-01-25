@@ -68,13 +68,37 @@ def get_lemma(word, pos):
     if unitex_dictionary is None:
         _read_unitex_dictionary()
     
+    if '\0' in word:
+        logging.error('\\0 in {}'.format(word))
+    
+    word = word.lower()
     if pos not in lemmatizable_tags:
         return word
     
-    word = word.lower()
-    if (word, pos) in unitex_dictionary:
-        return unitex_dictionary[(word, pos)]
-    else:
-        logging.warning('Could not find lemma for word {} with POS {}'.format(word, pos))
+    if (word, pos) not in unitex_dictionary:
+        # a lot of times, this happens with signs like $ or %
+        if len(word) == 1:
+            return word
+        
+        # the POS tag could be wrong
+        # but nouns and adjectives are more likely to be mistaken for each other
+        #TODO: check if it is a good idea to allow changes from noun/adj to verb
+        if pos == 'NOUN':
+            try_these = ['ADJ', 'VERB']
+        elif pos == 'ADJ':
+            try_these = ['NOUN', 'VERB']
+        else:
+            try_these = ['NOUN', 'ADJ']
+        
+        for other_pos in try_these:            
+            if (word, other_pos) in unitex_dictionary:
+                logging.debug('Could not find lemma for word {} with POS {},'\
+                              'but found for POS {}'.format(word, pos, other_pos))
+                return unitex_dictionary[(word, other_pos)]
+        
+        msg = 'Could not find lemma for word {} (tagged {}, but tried other tags)'
+        logging.info(msg.format(word, pos))
         return word
+        
+    return unitex_dictionary[(word, pos)]
     
