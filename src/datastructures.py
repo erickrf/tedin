@@ -8,6 +8,7 @@ from __future__ import unicode_literals
 import re
 import six
 from enum import Enum
+from collections import namedtuple
 
 import resources
 
@@ -92,6 +93,8 @@ class ConllPos(object):
     dep_head = 6 # dependency head
     dep_rel = 7 # dependency relation
 
+Dependency = namedtuple('Dependency', ['relation', 'head', 'modifier'])
+
 class Sentence(object):
     '''
     Class to store a sentence with linguistic annotations.
@@ -119,6 +122,8 @@ class Sentence(object):
             self._read_conll_output(parser_output)
         else:
             raise ValueError('Unknown format: %s' % output_format)
+        
+        self.extract_dependency_tuples()
     
     def __unicode__(self):
         return ' '.join(unicode(t) for t in self.tokens)
@@ -126,6 +131,26 @@ class Sentence(object):
     def __repr__(self):
         repr_str = unicode(self)
         return _compat_repr(repr_str)
+    
+    def extract_dependency_tuples(self):
+        '''
+        Extract dependency tuples in the format relation(token1, token2)
+        from the sentence tokens.
+        
+        These tuples are stored in the sentence object as namedtuples
+        (relation, head, modifier). They are stored in a set, so duplicates will be lost.
+        '''
+        self.dependencies = set()
+        # TODO: use collapsed dependencies (collapse preposition and/or conjunctions)
+        for token in self.tokens:
+            # ignore punctuation dependencies
+            relation = token.dependency_relation
+            if relation == 'p':
+                continue
+            
+            head = 'ROOT' if token.head is None else token.head.text.lower()
+            dep = Dependency(relation, head, token.text)
+            self.dependencies.add(dep)
     
     def structure_representation(self):
         '''

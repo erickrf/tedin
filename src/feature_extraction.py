@@ -146,6 +146,29 @@ def is_negated(verb):
     
     return False
 
+def dependency_overlap(pair, both):
+    '''
+    Check how many of the dependencies on the pairs match. Return the ratio between
+    dependencies in both sentences and those only in H (or also in T if `both` 
+    is True). 
+    
+    :type pair: datastructures.Pair
+    :param both: if True, return a tuple with the ratio to dependencies in T and H.
+    '''
+    # dependencies are stored as a tuple of 3 string: dependency label, head
+    # and modifier. This function doesn't check lemmas or anything.
+    deps_t = pair.annotated_t.dependencies
+    deps_h = pair.annotated_h.dependencies
+    
+    num_common = len(deps_t.intersection(deps_h))
+    ratio_h = num_common / len(deps_h)
+    
+    if both:
+        ratio_t = num_common / len(deps_t)
+        return (ratio_t, ratio_h)
+    else:
+        return ratio_h
+
 def negation_check(t, h):
     '''
      Check if a verb from H is negated in T. Negation is understood both as the
