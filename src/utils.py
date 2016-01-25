@@ -231,12 +231,11 @@ def preprocess_dependency(pairs):
         raise ValueError('Unknown parser: %s' % config.parser)
     
     for i, pair in enumerate(pairs):
-        # run both at once to save time -- especially important if using a parser server
         tokens_t = tokenize_sentence(pair.t)
         tokens_h = tokenize_sentence(pair.h)
-        texts = '{}\n\n{}'.format(' '.join(tokens_t), ' '.join(tokens_h))
-        output = parser_function(texts)
-        output_t, output_h = output.split('\n\n', 1)
+        
+        output_t = parser_function(' '.join(tokens_t))
+        output_h = parser_function(' '.join(tokens_h))
         
         try:
             pair.annotated_t = datastructures.Sentence(output_t, parser_format)
