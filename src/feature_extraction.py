@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import unicode_literals
+
 '''
 Functions to extract features from the pairs, to be used by
 machine learning algorithms.
@@ -11,6 +13,7 @@ import logging
 from operator import xor
 
 import utils
+import numerals
 import datastructures
 import config
 
@@ -95,6 +98,39 @@ def extract_features_minimal(pairs, model_config):
     features = np.array([words_in_common(pair, stopwords) for pair in pairs])
     
     return features
+
+def quantity_agreement(pair):
+    '''
+    Check if quantities on t and h match.
+    
+    Only checks quantities modifying aligned heads. This returns 0 if there is a mismatch
+    and 1 otherwise.
+    
+    :type pair: datastructures.Pair
+    '''
+    for token_t, token_h in pair.lexical_alignments:
+        # let's assume only one quantity modifier for each token
+        # (honestly, how could there be more than one?)
+        quantity_t = [d for d in token_t.dependents
+                      if d.dependency_relation == 'num']
+        quantity_h = [d for d in token_h.dependents
+                      if d.dependency_relation == 'num']
+        
+        if len(quantity_t) > 1 or len(quantity_h) > 1:
+            msg = 'More than one quantity modifier in "{}"'
+            logging.warning(msg.format(pair.t))
+        
+        if len(quantity_t) == 0 or len(quantity_h) == 0:
+            continue
+        
+        quantity_t = numerals.get_number(quantity_t[0])
+        quantity_h = numerals.get_number(quantity_h[0])
+        if quantity_h != quantity_t:
+            msg = 'Quantities differ in pair {}: {} and {}'
+            logging.debug(msg.format(pair.id, quantity_t, quantity_h))
+            return 0
+    
+    return 1
 
 def is_negated(verb):
     '''
