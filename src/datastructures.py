@@ -77,6 +77,25 @@ class Token(object):
     
     def __unicode__(self):
         return u'<Token %s>' % self.text
+    
+    def get_dependents(self, relation, single=True):
+        '''
+        Return modifiers (syntactic dependents) that have the specified dependency
+        relation.
+        
+        :param single: if True, a single Token is returned, or None. Otherwise, 
+            a list is returned (even if there is only one element). 
+        '''
+        deps = [dep for dep in self.dependents 
+                if dep.dependency_relation == relation]
+        
+        if single:
+            if len(deps) > 0:
+                return deps[0]
+            else:
+                return None
+        else:
+            return deps
 
 class ConllPos(object):
     '''

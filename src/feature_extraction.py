@@ -61,10 +61,15 @@ def pipeline_minimal(pairs, model_config):
 def pipeline_dependency(pairs):
     '''
     Process the pairs and return a numpy array with feature representations.
-    
-    The pipeline follows the work of Sharma et al. (2015)
     '''
     utils.preprocess_dependency(pairs)
+    
+    extractors = [dependency_overlap, negation_check, quantity_agreement]
+    
+    # some feature extractors return tuples, others return ints
+    # convert each one to numpy and then join them
+    feature_arrays = [[np.array(f(pair)) for f in extractors]
+                      for pair in pairs]
 
 
 def extract_features_minimal(pairs, model_config):
@@ -127,36 +132,42 @@ def _is_negated(verb):
     
     return False
 
-def matching_verb_arguments(pair):
-    '''
-    Return 1 if there is a matching verb in both sentences with a matching subject
-    and object.
-    '''
-    for token1, token2 in pair.lexical_alignments:
-        # check pairs of aligned verbs
-        if token1.pos != 'VERB' or token2.pos != 'VERB':
-            continue
-        
-        # check if the arguments in H have a corresponding one in T
-        subj_h = [dep for dep in token2.dependents if dep.dependency_relation == 'nsubj']
-        dobj_h = [dep for dep in token2.dependents if dep.dependency_relation == 'dobj']
-        adpobj_h = [dep for dep in token2.dependents if dep.dependency_relation == 'adpobj']
-        
-        subj_t = [dep for dep in token2.dependents if dep.dependency_relation == 'nsubj'][0]
-        dobj_t = [dep for dep in token2.dependents if dep.dependency_relation == 'dobj'][0]
-        adpobj_t = [dep for dep in token2.dependents if dep.dependency_relation == 'adpobj'][0]
-        
-        if subj_h.text != subj_t.text:
-            # subjects must match exactly
-            #TODO: check passives
-            continue
-        
-        any_object_t = [dobj_t.text, adpobj_t.text]
-        if dobj_h.text in any_object_t or adpobj_h in any_object_t:
-            # either a match of direct object or adpositional object is fine
-            return 1
-    
-    return 0
+# #TODO: this feature is weird. does it help at all?
+# def matching_verb_arguments(pair, both=True):
+#     '''
+#     Check if there is at least one verb matching in the two sentences and, if so,
+#     its object and objects are the same. In case of a positive result, return 1.
+#     If one sentence contains an argument (subject or object) but the other 
+#     doesn't, it also results in 1.
+#     
+#     :param both: if True, return a tuple with two values. The first considers 
+#     whether T->H and the second, H->T. In other words, if H has an object absent
+#     in T, it would return (0, 1), provided the rest of the verb structure matches.
+#     '''
+#     def match():
+#         pass
+#     
+#     for token1, token2 in pair.lexical_alignments:
+#         # check pairs of aligned verbs
+#         if token1.pos != 'VERB' or token2.pos != 'VERB':
+#             continue
+#         
+#         # check if the arguments in H have a corresponding one in T
+#         subj_h = token2.get_dependents('nsubj')
+#         if subj_h is not None:
+#             # subjects must match exactly
+#             #TODO: check passives
+#             subj_t = token1.get_dependents('nsubj')
+#             if subj_h.text != subj_t.text:
+#                 return 0
+#         
+#         dobj_h = token2.get_dependents('dobj')
+#         adpobj_h = token2.get_dependents('adpobj')
+#         
+#         dobj_t = token1.get_dependents('dobj')
+#         adpobj_h = token1.get_dependents('adpobj')
+#         
+#     return 0
 
 def dependency_overlap(pair, both=True):
     '''
