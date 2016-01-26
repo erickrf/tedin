@@ -244,6 +244,7 @@ def preprocess_dependency(pairs):
             tb = traceback.format_exc()
             logging.error('Error reading parser output:', e)
             logging.error(tb)
-        
+    
+        find_lexical_alignments(pair)    
         pairs[i] = pair
-
+    

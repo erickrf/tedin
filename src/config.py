@@ -32,6 +32,7 @@ malt_model = 'uni-dep-tb-ptbr'
 # label of the dependency relation indicating negation 
 negation_rel = 'neg'
 
+
 # =============
 # Tagger config
 # =============

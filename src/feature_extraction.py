@@ -146,6 +146,37 @@ def is_negated(verb):
     
     return False
 
+def matching_verb_arguments(pair):
+    '''
+    Return 1 if there is a matching verb in both sentences with a matching subject
+    and object.
+    '''
+    for token1, token2 in pair.lexical_alignments:
+        # check pairs of aligned verbs
+        if token1.pos != 'VERB' or token2.pos != 'VERB':
+            continue
+        
+        # check if the arguments in H have a corresponding one in T
+        subj_h = [dep for dep in token2.dependents if dep.dependency_relation == 'nsubj']
+        dobj_h = [dep for dep in token2.dependents if dep.dependency_relation == 'dobj']
+        adpobj_h = [dep for dep in token2.dependents if dep.dependency_relation == 'adpobj']
+        
+        subj_t = [dep for dep in token2.dependents if dep.dependency_relation == 'nsubj'][0]
+        dobj_t = [dep for dep in token2.dependents if dep.dependency_relation == 'dobj'][0]
+        adpobj_t = [dep for dep in token2.dependents if dep.dependency_relation == 'adpobj'][0]
+        
+        if subj_h.text != subj_t.text:
+            # subjects must match exactly
+            #TODO: check passives
+            continue
+        
+        any_object_t = [dobj_t.text, adpobj_t.text]
+        if dobj_h.text in any_object_t or adpobj_h in any_object_t:
+            # either a match of direct object or adpositional object is fine
+            return 1
+    
+    return 0
+
 def dependency_overlap(pair, both):
     '''
     Check how many of the dependencies on the pairs match. Return the ratio between
