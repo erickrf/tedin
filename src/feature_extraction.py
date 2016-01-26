@@ -16,6 +16,7 @@ import utils
 import numerals
 import datastructures
 import config
+import resources
 
 def create_lda_vectors(pairs):
     pass
@@ -65,26 +66,6 @@ def pipeline_dependency(pairs):
     '''
     utils.preprocess_dependency(pairs)
 
-def load_stopwords(path=None):
-    '''
-    Load the stopwords from a file.
-    
-    :param path: the file containing stopwords. If None, the default
-        from global configuration is read.
-    :return type: set or None
-    '''
-    if path is None:
-        path = config.stopwords_path
-        
-    if path is None or path == '':
-        logging.warning('No stopword file set. Stopwords won\'t be treated.')
-        return None
-    
-    with open(path, 'rb') as f:
-        text = unicode(f.read(), 'utf-8')
-    
-    stopwords = set(text.splitlines())
-    return stopwords
 
 def extract_features_minimal(pairs, model_config):
     '''
@@ -94,7 +75,7 @@ def extract_features_minimal(pairs, model_config):
     
     :return: a numpy 2-dim array
     '''
-    stopwords = load_stopwords(model_config.stopwords_path)
+    stopwords = resources.load_stopwords(model_config.stopwords_path)
     features = np.array([words_in_common(pair, stopwords) for pair in pairs])
     
     return features
@@ -102,10 +83,10 @@ def extract_features_minimal(pairs, model_config):
 def quantity_agreement(pair):
     '''
     Check if quantities on t and h match.
-    
+     
     Only checks quantities modifying aligned heads. This returns 0 if there is a mismatch
     and 1 otherwise.
-    
+     
     :type pair: datastructures.Pair
     '''
     for token_t, token_h in pair.lexical_alignments:
@@ -115,24 +96,24 @@ def quantity_agreement(pair):
                       if d.dependency_relation == 'num']
         quantity_h = [d for d in token_h.dependents
                       if d.dependency_relation == 'num']
-        
+         
         if len(quantity_t) > 1 or len(quantity_h) > 1:
             msg = 'More than one quantity modifier in "{}"'
             logging.warning(msg.format(pair.t))
-        
+         
         if len(quantity_t) == 0 or len(quantity_h) == 0:
             continue
-        
+         
         quantity_t = numerals.get_number(quantity_t[0])
         quantity_h = numerals.get_number(quantity_h[0])
         if quantity_h != quantity_t:
             msg = 'Quantities differ in pair {}: {} and {}'
             logging.debug(msg.format(pair.id, quantity_t, quantity_h))
             return 0
-    
+     
     return 1
 
-def is_negated(verb):
+def _is_negated(verb):
     '''
     Check if a verb is negated in the syntactic tree. This function searches its
     direct syntactic children for a negation relation. 
@@ -146,7 +127,7 @@ def is_negated(verb):
     
     return False
 
-def dependency_overlap(pair, both):
+def dependency_overlap(pair, both=True):
     '''
     Check how many of the dependencies on the pairs match. Return the ratio between
     dependencies in both sentences and those only in H (or also in T if `both` 
@@ -169,16 +150,18 @@ def dependency_overlap(pair, both):
     else:
         return ratio_h
 
-def negation_check(t, h):
+def negation_check(pair):
     '''
      Check if a verb from H is negated in T. Negation is understood both as the
      verb itself negated by an adverb such as not or never, or by the presence
      of a non-negated antonym.
      
-     :type t: datastructures.Sentence
-     :type h: datastructures.Sentence
+     :type pair: datastructures.Pair
      :return: 1 for negation, 0 otherwise
     '''
+    t = pair.annotated_t
+    h = pair.annotated_h
+    
     # the POS check is based on the Universal Treebanks tagset
     verbs_h = [token for token in h.tokens
                if token.pos == 'VERB']
@@ -192,8 +175,8 @@ def negation_check(t, h):
         # the overhead of creating a set to check 1-4 verbs is not worth it
         for verb_h in verbs_h:
             if verb_t.lemma == verb_h.lemma:
-                t_negated = is_negated(verb_t)
-                h_negated = is_negated(verb_h)
+                t_negated = _is_negated(verb_t)
+                h_negated = _is_negated(verb_h)
                 if xor(t_negated, h_negated):
                     return 1
                 

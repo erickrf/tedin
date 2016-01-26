@@ -20,7 +20,7 @@ tag_map = {'V': 'VERB',
 
 lemmatizable_tags = set(tag_map.values())
 
-def _read_unitex_dictionary():
+def _load_unitex_dictionary():
     '''
     Read the Unitex dictionary with inflected word forms. 
     
@@ -57,6 +57,27 @@ def _read_unitex_dictionary():
             
     logging.info('Finished')
 
+def load_stopwords(path=None):
+    '''
+    Load the stopwords from a file.
+    
+    :param path: the file containing stopwords. If None, the default
+        from global configuration is read.
+    :return type: set or None
+    '''
+    if path is None:
+        path = config.stopwords_path
+        
+    if path is None or path == '':
+        logging.warning('No stopword file set. Stopwords won\'t be treated.')
+        return None
+    
+    with open(path, 'rb') as f:
+        text = unicode(f.read(), 'utf-8')
+    
+    stopwords = set(text.splitlines())
+    return stopwords
+
 def get_lemma(word, pos):
     '''
     Retrieve the lemma of a word given its POS tag.
@@ -66,7 +87,7 @@ def get_lemma(word, pos):
     '''
     global unitex_dictionary
     if unitex_dictionary is None:
-        _read_unitex_dictionary()
+        _load_unitex_dictionary()
     
     if '\0' in word:
         logging.error('\\0 in {}'.format(word))
