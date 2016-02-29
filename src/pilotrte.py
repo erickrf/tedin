@@ -35,6 +35,7 @@ def train_models(pairs, config_file):
      
     return classifier, regressor
 
+
 def save_model(model, dirname, filename):
     '''
     Save a model with pickle in the given path.
@@ -42,6 +43,7 @@ def save_model(model, dirname, filename):
     output_file = os.path.join(dirname, filename)
     with open(output_file, 'wb') as f:
         cPickle.dump(model, f, -1)
+
 
 def set_log(verbose):
     '''
@@ -76,4 +78,3 @@ if __name__ == '__main__':
     save_model(classifier, args.output_dir, 'classifier.dat')
     save_model(regressor, args.output_dir, 'regressor.dat')
 
-    
