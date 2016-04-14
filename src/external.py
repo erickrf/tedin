@@ -8,7 +8,7 @@ Functions for calling external NLP tools.
 
 import urllib
 import subprocess
-import nlpnet
+#import nlpnet
 import nltk
 import tempfile
 import json
@@ -28,18 +28,18 @@ def load_senna_tagger():
     return nltk.tag.SennaTagger(config.senna_path)
 
 
-def load_nlpnet_tagger(language='pt'):
-    """
-    Load and return the nlpnet POS tagger.
-    Its location in the file system is read from the config module.
-    """
-    # store in global variable to avoid loading times
-    global nlpnet_tagger
-    if nlpnet_tagger is not None:
-        return nlpnet_tagger
-
-    nlpnet_tagger = nlpnet.POSTagger(config.nlpnet_path_pt, language=language)
-    return nlpnet_tagger
+# def load_nlpnet_tagger(language='pt'):
+#     """
+#     Load and return the nlpnet POS tagger.
+#     Its location in the file system is read from the config module.
+#     """
+#     # store in global variable to avoid loading times
+#     global nlpnet_tagger
+#     if nlpnet_tagger is not None:
+#         return nlpnet_tagger
+#
+#     nlpnet_tagger = nlpnet.POSTagger(config.nlpnet_path_pt, language=language)
+#     return nlpnet_tagger
 
 
 def call_malt(text):

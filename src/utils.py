@@ -23,7 +23,8 @@ def tokenize_sentence(text, change_quotes=True, change_digits=False):
     '''
     Tokenize the given sentence in Portuguese. The tokenization is done in conformity
     with Universal Treebanks (at least it attempts so).
-    
+
+    :param text: text to be tokenized, as a string
     :param change_quotes: if True, change different kinds of quotation marks to "
     :param change_digits: if True, replaces all digits with 9.
     '''
@@ -51,6 +52,7 @@ def tokenize_sentence(text, change_quotes=True, change_digits=False):
     tokenizer = RegexpTokenizer(tokenizer_regexp)
     
     return tokenizer.tokenize(text)
+
 
 def find_lexical_alignments(pair):
     '''
@@ -85,6 +87,7 @@ def find_lexical_alignments(pair):
                 token_t.aligned_to.append(token_h)
                 token_h.aligned_to.append(token_t)
 
+
 def extract_classes(pairs):
     '''
     Extract the class infomartion (paraphrase, entailment, none, contradiction)
@@ -95,6 +98,7 @@ def extract_classes(pairs):
     classes = np.array([pair.entailment.value - 1 for pair in pairs])
     return classes
 
+
 def extract_similarities(pairs):
     '''
     Extract the similarity value from the pairs.
@@ -103,6 +107,7 @@ def extract_similarities(pairs):
     '''
     z = np.array([p.similarity for p in pairs])
     return z
+
 
 def read_xml(filename):
     '''
@@ -147,12 +152,12 @@ def read_xml(filename):
     
     return pairs
 
+
 def write_rte_file(filename, pairs, **attribs):
     '''
     Write an XML file containing the given RTE pairs.
     
     :param pairs: list of Pair objects
-    :parma task: the task attribute in the XML elements
     '''
     root = ET.Element('entailment-corpus')
     for i, pair in enumerate(pairs, 1):
@@ -174,6 +179,7 @@ def write_rte_file(filename, pairs, **attribs):
     with open(filename, 'wb') as f:
         f.write(reparsed.toprettyxml('    ', '\n', 'utf-8'))
 
+
 def preprocess_minimal(pairs):
     '''
     Apply a minimal preprocessing pipeline.
@@ -192,6 +198,7 @@ def preprocess_minimal(pairs):
         s.tokens = tokens
         pair.annotated_h = s
 
+
 def train_classifier(x, y):
     '''
     Train and return a classifier with the supplied data
@@ -200,6 +207,7 @@ def train_classifier(x, y):
     classifier.fit(x, y)
     
     return classifier
+
 
 def train_regressor(x, y):
     '''
@@ -210,20 +218,21 @@ def train_regressor(x, y):
     
     return regressor
 
-def preprocess_dependency(pairs):
+
+def preprocess_dependency(pairs, model_config):
     '''
     Preprocess the given pairs with a dependency parser.
     
-    :param parser: which parser to use to preprocess. Allowed values
-        are 'palavras', 'corenlp' and 'malt'
+    :param pairs: pairs to be processed
+    :param model_config: general configuration
     '''
-    if config.parser == 'corenlp':
+    if model_config.parser == 'corenlp':
         parser_function = external.call_corenlp
         parser_format = 'conll'
-    elif config.parser == 'palavras':
+    elif model_config.parser == 'palavras':
         parser_function = external.call_palavras
         parser_format = 'palavras'
-    elif config.parser == 'malt':
+    elif model_config.parser == 'malt':
         parser_function = external.call_malt
         parser_format = 'conll'
     else:
@@ -246,4 +255,5 @@ def preprocess_dependency(pairs):
     
         find_lexical_alignments(pair)    
         pairs[i] = pair
-    
+
+

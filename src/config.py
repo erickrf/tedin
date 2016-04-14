@@ -14,8 +14,8 @@ and external tools that are shared by all configurations.
 # this must be one of corenlp, palavras or malt
 parser = 'corenlp'
 
-corenlp_url = r'http://10.11.14.133'
-corenlp_port = 8080
+corenlp_url = r'http://143.107.183.175/'
+corenlp_port = 13388
 
 # path to the corenlp models inside the server
 corenlp_depparse_path = r'pt-model/dep-parser'
@@ -55,14 +55,3 @@ tfidf_path = r'data/lda-100/tfidf.dat'
 tfidf_dict_path = r'data/lda-100/token-dict.dat'
 
 unitex_dictionary_path = 'data/Delaf2015v04.dic'
-
-
-
-# # ==================================
-# # Machine learning algorithms config
-# # ==================================
-# 
-# import sklearn
-# import sklearn.linear_model as linear
-# classifier_class = sklearn.svm.SVC #linear.LogisticRegression
-# regressor_class = linear.LinearRegression

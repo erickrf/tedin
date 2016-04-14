@@ -13,6 +13,7 @@ import cPickle
 
 import utils
 
+
 def train_models(pairs, config_file):
     '''
     Train a classifier with the given pairs
@@ -73,7 +74,7 @@ if __name__ == '__main__':
     pairs = utils.read_xml(args.input)
     
     classifier, regressor = train_models(pairs, args.configuration)
-    
+
     logging.info('Saving models')
     save_model(classifier, args.output_dir, 'classifier.dat')
     save_model(regressor, args.output_dir, 'regressor.dat')
