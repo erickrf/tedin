@@ -5,19 +5,13 @@ from __future__ import division
 import tensorflow as tf
 import numpy as np
 
+from utils import Symbol
+
 # digits 0-9
 encoder_vocab = 10
 
 # digits 0-9 and END symbol
 decoder_vocab = 11
-
-
-class Symbol(object):
-    """
-    Placeholder class for values used in the RNNs.
-    """
-    END = 10
-    GO = 11
 
 
 class NumericLSTM(object):
