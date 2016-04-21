@@ -112,10 +112,11 @@ def call_palavras(text):
 def call_corenlp(text):
     """
     Call Stanford corenlp, which should be running at the address specified in
-    the config module. The text should be already tokenized with tokens separated
-    by whitespace.
+    the config module.
 
     Only a dependency parser and POS tagger are run.
+
+    :param text: text with tokens separated by whitespace
     """
     properties = {'tokenize.whitespace': 'true',
                   'annotators': 'tokenize,ssplit,pos,depparse',
@@ -139,9 +140,5 @@ def call_corenlp(text):
 
     # bug: stanford corenlp returns a latin1 string when we supply it with utf-8
     output = unicode(response.content, 'utf-8')
-
-    # bug 2: for some reason, sometimes the output comes with some \0 chars
-    # Apparently, fixed. TODO: Check if this works in Windows
-    # output = output.replace('\0', '')
 
     return output

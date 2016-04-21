@@ -17,7 +17,8 @@ with open(args.input, 'rb') as f:
     text = unicode(f.read(), 'utf-8')
 
 text = re.sub(r'Epoch.*', '', text)
-text = text.replace('\n\n', '\n')
+text = re.sub(r'^\n*', '', text)
+text = text.replace('\n\n', '\n').replace('.', ',')
 text = re.sub(r'Loss: ([\d.]+)', r'\1', text)
 
 with open(args.output, 'wb') as f:

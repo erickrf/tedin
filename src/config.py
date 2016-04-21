@@ -14,7 +14,7 @@ and external tools that are shared by all configurations.
 # this must be one of corenlp, palavras or malt
 parser = 'corenlp'
 
-corenlp_url = r'http://143.107.183.175/'
+corenlp_url = r'http://143.107.183.175'
 corenlp_port = 13388
 
 # path to the corenlp models inside the server

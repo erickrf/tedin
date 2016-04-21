@@ -64,6 +64,11 @@ def pipeline_minimal(pairs, model_config):
 def pipeline_dependency(pairs, model_config):
     '''
     Process the pairs and return a numpy array with feature representations.
+
+    :param pairs: the pairs to be processed
+    :param model_config: a configuration object containing
+        the following attributes:
+        * `parser` ('corenlp', 'palavras' or 'malt')
     '''
     utils.preprocess_dependency(pairs, model_config)
 
