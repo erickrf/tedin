@@ -7,8 +7,11 @@ import numpy as np
 
 from utils import Symbol
 
-# digits 0-9
-encoder_vocab = 10
+# digits 0-9, END and GO symbols
+# maybe END and GO could be merged somehow to save one embedding entry
+# but it seems more trouble than its worth... an additional embedding
+# entry that is never used doesn't need to be trained anyway
+input_vocab = 12
 
 # digits 0-9 and END symbol
 decoder_vocab = 11
@@ -40,7 +43,7 @@ class NumericLSTM(object):
         self.first_term_size = tf.placeholder(tf.int32, [None], 'first_term_size')
 
         # embeddings are shared between encoder and decoder
-        shape = [encoder_vocab, embedding_size]
+        shape = [input_vocab, embedding_size]
         self.embeddings = tf.Variable(tf.random_uniform(shape, -embedding_abs_max,
                                                         embedding_abs_max),
                                       name='embeddings')
@@ -130,10 +133,10 @@ class NumericLSTM(object):
                                                    decoder_labels,
                                                    label_weights)
         l2_loss = self.l2_constant * tf.nn.l2_loss(self.softmax_weights)
-        loss = labeled_loss + l2_loss
+        self.loss = labeled_loss + l2_loss
 
         optimizer = tf.train.AdamOptimizer(self.learning_rate, epsilon=0.1)
-        gradients, v = zip(*optimizer.compute_gradients(loss))
+        gradients, v = zip(*optimizer.compute_gradients(self.loss))
         gradients, _ = tf.clip_by_global_norm(gradients, clip_value)
 
         self.train_op = optimizer.apply_gradients(zip(gradients, v),
