@@ -6,6 +6,8 @@ from __future__ import division
 Utilities for working with the numeric LSTM.
 """
 
+import json
+import os
 import numpy as np
 
 
@@ -114,6 +116,39 @@ def get_data(train_size, valid_size, num_time_steps):
     valid_sizes = sizes[train_size:]
 
     return (train_set, train_sizes, valid_set, valid_sizes)
+
+
+def save_parameters(basefilename, embedding_size, num_time_steps):
+    """
+    Save the arguments used to instantiate a model.
+
+    :param basefilename: the base path to a filename. The suffix '-params.json'
+        will be appended
+    :param embedding_size: size of the embeddings
+    :param num_time_steps: maximum number of time steps
+    """
+    filename = basefilename + '-params.json'
+    data = {'embedding_size': embedding_size,
+            'num_time_steps': num_time_steps}
+
+    with open(filename, 'wb') as f:
+        json.dump(data, f)
+
+
+def load_parameters(basefilename):
+    """
+    Load a dictionary containing the parameters used to train an instance
+    of the autoencoder.
+
+    :param basefilename: the base path to the filename, without '-params.json'.
+        It is the same base file used to save the tensorflow model.
+    :return: a Python dictionary
+    """
+    filename = basefilename + '-params.json'
+    with open(filename, 'rb') as f:
+        data = json.load(f)
+
+    return data
 
 
 def get_accuracy(model, session, data, sizes, ignore_end=True):

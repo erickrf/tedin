@@ -3,7 +3,7 @@
 from __future__ import print_function, division
 
 """
-An interactive shell for evaluating the numeric LSTM.
+An interactive shell for evaluating the memorizer auto-encoder.
 """
 
 import argparse
@@ -11,6 +11,7 @@ import tensorflow as tf
 import numpy as np
 
 import memorizer
+import utils
 from utils import Symbol
 
 if __name__ == '__main__':
@@ -18,11 +19,14 @@ if __name__ == '__main__':
     parser.add_argument('load', help='File to load the model from')
     args = parser.parse_args()
 
+    params = utils.load_parameters(args.load)
+    num_time_steps = params['num_time_steps']
+    embedding_size = params['embedding_size']
+
     sess = tf.Session()
-    model = memorizer.NumericLSTM(300, 9)
+    model = memorizer.MemorizerAutoEncoder(embedding_size, num_time_steps)
     saver = tf.train.Saver(tf.trainable_variables())
     saver.restore(sess, args.load)
-    num_time_steps = 9
 
     while True:
         sequence = raw_input('Type a sequence of numbers or X to exit: ')

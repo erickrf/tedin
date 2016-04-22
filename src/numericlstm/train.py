@@ -38,10 +38,11 @@ if __name__ == '__main__':
     logging.info('Training with %d sequences; %d for validation' % (args.train, args.valid))
 
     sess = tf.Session()
-    model = memorizer.NumericLSTM(args.embedding_size, args.num_time_steps)
+    model = memorizer.MemorizerAutoEncoder(args.embedding_size, args.num_time_steps)
 
     sess.run(tf.initialize_all_variables())
     saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=1)
+    utils.save_parameters(args.save_file, args.embedding_size, args.num_time_steps)
     logging.info('Initialized the model and all variables. Starting training...')
 
     best_acc = 0
