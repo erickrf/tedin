@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import division
+
 """
 Utilities for working with the numeric LSTM.
 """
@@ -92,3 +94,51 @@ def generate_dataset(array_size, num_sequences, return_sizes=True):
 
     return data
 
+
+def get_data(train_size, valid_size, num_time_steps):
+    """
+    Generate data for training and validation, shuffle and return them.
+
+    :return: a 4-tuple (train_set, train_sizes, valid_set, valid_sizes)
+    """
+    total_data = train_size + valid_size
+    data, sizes = generate_dataset(num_time_steps, total_data)
+    shuffle_data_and_sizes(data, sizes)
+
+    # removing duplicates must be change to account for the sizes.... at any rate,
+    # we were getting 5 duplicates out of 32k. i don't think we really need it
+    # data = remove_duplicates(data)
+    train_set = data[:, :train_size]
+    valid_set = data[:, train_size:]
+    train_sizes = sizes[:train_size]
+    valid_sizes = sizes[train_size:]
+
+    return (train_set, train_sizes, valid_set, valid_sizes)
+
+
+def get_accuracy(model, session, data, sizes, ignore_end=True):
+    """
+    Get the prediciton accuracy on the supplied data.
+
+    :param model: an instance of the numeric LSTM
+    :param session: current tensorflow session
+    :param data: numpy array with shape (num_time_steps, batch_size)
+    :param sizes: actual size of each sequence in data
+    :param ignore_end: if True, ignore the END symbol
+    """
+    answer = model.run(session, data, sizes)
+
+    # if the answer is longer than it should, truncate it
+    if len(answer) > len(data):
+        answer = answer[:len(data)]
+
+    hits = answer == data
+    total_items = answer.size
+
+    if ignore_end:
+        non_end = data != Symbol.END
+        hits_non_end = hits[non_end]
+        total_items = np.sum(non_end)
+
+    acc = np.sum(hits_non_end) / total_items
+    return acc

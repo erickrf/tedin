@@ -57,12 +57,12 @@ class NumericLSTM(object):
         decoder_input = self.generate_decoder_input(self.embedded_1st_term)
 
         with tf.variable_scope('encoder') as self.encoder_scope:
-            _, state_1st_term = tf.nn.rnn(self.lstm_cell, self.embedded_1st_term,
+            _, self.state_1st_term = tf.nn.rnn(self.lstm_cell, self.embedded_1st_term,
                                           sequence_length=self.first_term_size,
                                           dtype=tf.float32)
 
         with tf.variable_scope('decoder') as self.decoder_scope:
-            raw_outputs, _ = tf.nn.seq2seq.rnn_decoder(decoder_input, state_1st_term,
+            raw_outputs, _ = tf.nn.seq2seq.rnn_decoder(decoder_input, self.state_1st_term,
                                                        self.lstm_cell)
 
         with tf.variable_scope('output_softmax') as softmax_scope:
@@ -94,7 +94,7 @@ class NumericLSTM(object):
 
         encoder_feeds = {self.first_term: input_sequence,
                          self.first_term_size: sequence_size}
-        hidden_state = session.run(self.embedded_1st_term,
+        hidden_state = session.run(self.state_1st_term,
                                    feed_dict=encoder_feeds)
 
         # this array control which sequences have already been finished by the

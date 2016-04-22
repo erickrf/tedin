@@ -1,99 +1,84 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+
 """
-Scripts for training the numeric LSTM.
+Script for training the numeric LSTM.
 """
 
 import tensorflow as tf
-import numpy as np
 import logging
+import argparse
 
 import utils
-from utils import Symbol
 import memorizer
 import config
 
 
-total_data = config.train_size + config.valid_size
-data, sizes = utils.generate_dataset(config.num_time_steps, total_data)
-utils.shuffle_data_and_sizes(data, sizes)
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('save_file', help='Path to file to save trained model')
+    parser.add_argument('-t', help='Maximum number of time steps', default=9,
+                        dest='num_time_steps', type=int)
+    parser.add_argument('-n', help='Embedding size', default=300,
+                        dest='embedding_size', type=int)
+    parser.add_argument('-b', help='Batch size', default=32, dest='batch_size', type=int)
+    parser.add_argument('-e', help='Number of epochs', default=10, dest='num_epochs', type=int)
+    parser.add_argument('--train', help='Size of the training set', default=32000, type=int)
+    parser.add_argument('--valid', help='Size of the validation set', default=2000, type=int)
+    args = parser.parse_args()
 
-# removing duplicates must be change to account for the sizes.... at any rate,
-# we were getting 5 duplicates out of 32k. i don't think we really need it
-#data = remove_duplicates(data)
-train_set = data[:, :config.train_size]
-valid_set = data[:, config.train_size:]
-train_sizes = sizes[:config.train_size]
-valid_sizes = sizes[config.train_size:]
+    logging.basicConfig(level=logging.INFO)
 
-n_train = train_set.shape[1]
-n_valid = valid_set.shape[1]
-num_batches = int(n_train / config.batch_size)
-print 'Training with %d sequences; %d for validation' % (n_train, n_valid)
+    train_set, train_sizes, valid_set, valid_sizes = utils.get_data(args.train,
+                                                                    args.valid,
+                                                                    args.num_time_steps)
+    num_batches = int(args.train / args.batch_size)
+    logging.info('Training with %d sequences; %d for validation' % (args.train, args.valid))
 
-sess = tf.Session()
-model = memorizer.NumericLSTM(config.embedding_size, config.num_time_steps)
+    sess = tf.Session()
+    model = memorizer.NumericLSTM(args.embedding_size, args.num_time_steps)
 
-sess.run(tf.initialize_all_variables())
-saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=1)
+    sess.run(tf.initialize_all_variables())
+    saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=1)
+    logging.info('Initialized the model and all variables. Starting training...')
 
-logging.info('Initialized the model and all variables. Starting train...')
+    best_acc = 0
+    accumulated_loss = 0
+    for epoch_num in range(args.num_epochs):
+        # loop for epochs - each one goes through the whole dataset
+        utils.shuffle_data_and_sizes(train_set, train_sizes)
+        last_batch_idx = 0
 
+        for batch_num in range(num_batches):
+            batch_idx = last_batch_idx + args.batch_size
+            batch = train_set[:, last_batch_idx:batch_idx]
+            sizes = train_sizes[last_batch_idx:batch_idx]
+            last_batch_idx = batch_idx
 
-def get_accuracy(model, session, data, sizes, ignore_end=True):
-    """
-    Get the prediciton accuracy on the supplied data.
+            feeds = {model.first_term: batch,
+                     model.first_term_size: sizes,
+                     model.l2_constant: 0.0001,
+                     model.learning_rate: 0.1}
 
-    :param model: an instance of the numeric LSTM
-    :param session: current tensorflow session
-    :param data: numpy array with shape (num_time_steps, batch_size)
-    :param sizes: actual size of each sequence in data
-    :param ignore_end: if True, ignore the END symbol
-    """
-    answer = model.run(session, data, sizes)
+            _, loss_value = sess.run([model.train_op, model.loss], feed_dict=feeds)
+            accumulated_loss += loss_value
 
-    # if the answer is longer than it should, truncate it
-    if len(answer) > len(data):
-        answer = answer[:len(data)]
+            if (batch_num + 1) % config.report_interval == 0:
+                avg_loss = accumulated_loss / config.report_interval
+                valid_acc = utils.get_accuracy(model, sess, valid_set, valid_sizes)
 
-    hits = answer == data
-    total_items = answer.size
+                logging.info('Epoch %d, batch %d' % (epoch_num + 1, batch_num + 1))
+                logging.info('Train loss: %.5f' % avg_loss)
 
-    if ignore_end:
-        non_end = data != Symbol.END
-        hits_non_end = hits[non_end]
-        total_items = np.sum(non_end)
+                msg = 'Validation accuracy: %f' % valid_acc
+                if valid_acc > best_acc:
+                    best_acc = valid_acc
+                    saver.save(sess, args.save_file)
+                    msg += ' (new model saved)'
+                logging.info(msg)
 
-    acc = np.sum(hits_non_end) / total_items
-    return acc
+                accumulated_loss = 0
 
-
-for epoch_num in range(config.num_epochs):
-    # loop for epochs - each one goes through the whole dataset
-    utils.shuffle_data_and_sizes(train_set, train_sizes)
-    last_batch_idx = 0
-
-    for batch_num in range(num_batches):
-        batch_idx = last_batch_idx + config.batch_size
-        batch = train_set[:, last_batch_idx:batch_idx]
-        sizes = train_sizes[last_batch_idx:batch_idx]
-        last_batch_idx = batch_idx
-
-        feeds = {model.first_term: batch,
-                 model.first_term_size: sizes,
-                 model.l2_constant: 0.0001,
-                 model.learning_rate: 0.1}
-
-        _, loss_value = sess.run([model.train_op, model.loss], feed_dict=feeds)
-        accumulated_loss += loss_value
-
-        if (batch_num + 1) % config.report_interval == 0:
-            print('Epoch %d, batch %d' % (epoch_num + 1, batch_num + 1))
-            avg_loss = accumulated_loss / config.report_interval
-            print('Train loss: %.5f' % avg_loss)
-            accumulated_loss = 0
-
-            valid_acc = get_accuracy(model, sess, valid_set, valid_sizes)
-            print('Validation accuracy: %f' % valid_acc)
-
-    print('')
+        print()
