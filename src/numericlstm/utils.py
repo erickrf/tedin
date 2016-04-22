@@ -3,7 +3,7 @@
 from __future__ import division
 
 """
-Utilities for working with the numeric LSTM.
+Utilities for working with the numeric autoencoders.
 """
 
 import json
@@ -78,7 +78,7 @@ def generate_dataset(array_size, num_sequences, return_sizes=True):
     seq_sizes = np.empty(num_sequences, dtype=np.int)
 
     possible_sizes = np.arange(1, array_size + 1)
-    exps = np.exp(possible_sizes)
+    exps = 2 ** possible_sizes #np.exp(possible_sizes)
     proportions = exps / np.sum(exps) * num_sequences
     proportions = np.ceil(proportions).astype(np.int)
 
