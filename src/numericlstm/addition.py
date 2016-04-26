@@ -24,7 +24,7 @@ class AdditionAutoEncoder(numericautoencoder.NumericAutoEncoder):
 
         :return: a list of tensors of shape [batch_size, embedding_size]
         """
-        embedded_add_sequence = self.generate_embeddings_list(self.sum)
+        embedded_add_sequence = self.generate_embeddings_list(self.sum, self.num_time_steps + 1)
         embedded_go = self._generate_batch_embedded_go(embedded_add_sequence[0])
 
         return [embedded_go] + embedded_add_sequence

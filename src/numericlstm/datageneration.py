@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import division
+
 """
 Functions for automatic generating data for the numeric autoencoders.
 """
 
 import numpy as np
 
+import utils
 from utils import Symbol
 
 
@@ -53,11 +56,10 @@ def ints_to_array_batch(x, max_time_steps):
     :return: 2-D array with shape (max_time_steps, len(x)) and one digit per cell.
     """
     x = np.copy(x)
-    max_power_10 = max_time_steps - 2
+    max_power_10 = max_time_steps - 1
 
-    # since the last row of the resulting array must be the END symbol,
     # this is the maximum number allowed
-    max_possible_number = 10 ** (max_time_steps - 1) - 1
+    max_possible_number = 10 ** max_time_steps - 1
     assert not any(x > max_possible_number), 'Cannot represent a number in the array'
 
     new = np.full((max_time_steps, len(x)), Symbol.END, np.int32)
@@ -65,10 +67,10 @@ def ints_to_array_batch(x, max_time_steps):
     new[0] = 0
 
     # start from 2 so that the last row always has END
-    for i in range(2, max_time_steps + 1):
+    for i in range(1, max_time_steps + 1):
         big_ones = x >= (10 ** max_power_10)
         new[-i][big_ones] = x[big_ones] % 10
-        x[big_ones] /= 10
+        x[big_ones] //= 10
 
         # on a related note: raising a variable to a power is faster than
         # dividing it by 10
@@ -99,7 +101,7 @@ def generate_numbers(num_time_steps, num_padding, batch_size):
     plus the given number of padding (as the END symbol)
     """
     shape = (num_time_steps, batch_size)
-    digits = np.random.random_integers(0, 9, shape)
+    digits = np.random.randint(0, 10, shape)
     numbers = batch_array_to_ints(digits)
     padding = np.full((num_padding, batch_size),
                       Symbol.END, np.int32)
@@ -108,12 +110,12 @@ def generate_numbers(num_time_steps, num_padding, batch_size):
     return (digits, numbers)
 
 
-def generate_data(num_time_steps, num_items):
+def generate_addition_data(num_time_steps, num_items):
     """
     Generate training data for the addition autoencoder
 
     :param num_time_steps: the maximum number of time steps of the encoder
-        it is understood that the decoder has one extra step
+        (it is understood that the result has one extra step)
     :param num_items: the number of items in the dataset (an item is
         the both terms and their result)
     :return: a tuple (first_terms, second_terms, first_term_sizes,
@@ -127,13 +129,18 @@ def generate_data(num_time_steps, num_items):
     sizes = np.arange(1, num_time_steps + 1)
     exps = 2 ** sizes
     proportions = 2 * num_items * exps / np.sum(exps)
+    proportions = np.ceil(proportions).astype(np.int)
 
-    # TODO: finish the rest of the code here with correct proportions
+    # just to make sure the resulting dataset has the intended size
+    # we discount from the last size, which has the most items
+    total_after_ceil = np.sum(proportions)
+    proportions[-1] -= (total_after_ceil - 2 * num_items)
 
     for i in range(num_time_steps):
         size = sizes[i]
-        num_padding = num_time_steps - i
-        num_sequences = np.ceil(proportions[i])
+        num_padding = num_time_steps - size
+        num_sequences = np.int(np.ceil(proportions[i]))
+
         digits, numbers = generate_numbers(size, num_padding, num_sequences)
         digits_pool.append(digits)
         number_pool.append(numbers)
@@ -149,7 +156,7 @@ def generate_data(num_time_steps, num_items):
     np.random.shuffle(all_numbers)
 
     # now divide it in the middle to get the two terms
-    middle = all_digits.shape[1] / 2
+    middle = np.int(all_digits.shape[1] / 2)
     first_terms = all_digits[:, :middle]
     first_terms_values = all_numbers[:middle]
     second_terms = all_digits[:, middle:]
@@ -163,3 +170,56 @@ def generate_data(num_time_steps, num_items):
     return (first_terms, second_terms,
             first_sizes, second_sizes,
             results)
+
+
+def _generate_memorizer_dataset(array_size, num_sequences, return_sizes=True):
+    """
+    Generate one dataset as a 2-dim numpy array
+
+    :param array_size: the array size expected by the network
+    :param num_sequences: the total number of sequences (columns) in the result
+    :param return_sizes: if True, returns a tuple with the dataset and
+        a 1-d array with the size of each sequence
+    """
+    data = np.random.randint(0, 10, (array_size, num_sequences))
+    seq_sizes = np.empty(num_sequences, dtype=np.int)
+
+    possible_sizes = np.arange(1, array_size + 1)
+    exps = 2 ** possible_sizes #np.exp(possible_sizes)
+    proportions = exps / np.sum(exps) * num_sequences
+    proportions = np.ceil(proportions).astype(np.int)
+
+    last_idx = 0
+    for i, prop in enumerate(proportions, 1):
+        until_idx = last_idx + prop
+
+        data[i:, last_idx:until_idx] = Symbol.END
+        seq_sizes[last_idx:until_idx] = i
+
+        last_idx = until_idx
+
+    if return_sizes:
+        return (data, seq_sizes)
+
+    return data
+
+
+def generate_memorizer_data(train_size, valid_size, num_time_steps):
+    """
+    Generate data for training and validation, shuffle and return them.
+
+    :return: a 4-tuple (train_set, train_sizes, valid_set, valid_sizes)
+    """
+    total_data = train_size + valid_size
+    data, sizes = _generate_memorizer_dataset(num_time_steps, total_data)
+    utils.shuffle_data_memorizer(data, sizes)
+
+    # removing duplicates must be change to account for the sizes.... at any rate,
+    # we were getting 5 duplicates out of 32k. i don't think we really need it
+    # data = remove_duplicates(data)
+    train_set = data[:, :train_size]
+    valid_set = data[:, train_size:]
+    train_sizes = sizes[:train_size]
+    valid_sizes = sizes[train_size:]
+
+    return (train_set, train_sizes, valid_set, valid_sizes)

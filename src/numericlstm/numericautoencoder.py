@@ -215,7 +215,7 @@ class NumericAutoEncoder(object):
         step_logits = tf.nn.xw_plus_b(decoder_step_output[0], self.softmax_weights, self.softmax_bias)
         self.next_digit = tf.argmax(step_logits, 1)
 
-    def generate_embeddings_list(self, sequence_indices):
+    def generate_embeddings_list(self, sequence_indices, num_time_steps=None):
         """
         Generate a list with the embeddings corresponding to the sequence_indices at
         each time step.
@@ -223,9 +223,10 @@ class NumericAutoEncoder(object):
         :param sequence_indices: a tensor of shape [num_time_steps, batch_size].
         :return: a list of tensors of shape [batch_size, embedding_size]
         """
+        num_time_steps = num_time_steps or self.num_time_steps
         embedded_sequence = tf.nn.embedding_lookup(self.embeddings, sequence_indices)
         return [tf.squeeze(time_step, [0])
-                for time_step in tf.split(0, self.num_time_steps, embedded_sequence)]
+                for time_step in tf.split(0, num_time_steps, embedded_sequence)]
 
     def _generate_batch_embedded_go(self, like):
         """

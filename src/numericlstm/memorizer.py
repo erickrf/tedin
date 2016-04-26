@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import tensorflow as tf
+import numpy as np
 
 import numericautoencoder
+from utils import Symbol
 
 
 class MemorizerAutoEncoder(numericautoencoder.NumericAutoEncoder):
@@ -45,3 +47,29 @@ class MemorizerAutoEncoder(numericautoencoder.NumericAutoEncoder):
         batch_end = numericautoencoder.generate_batch_end(input_as_list[0])
 
         return input_as_list + [batch_end]
+
+    def get_accuracy(self, session, data, sizes, ignore_end=True):
+        """
+        Get the prediciton accuracy on the supplied data.
+
+        :param session: current tensorflow session
+        :param data: numpy array with shape (num_time_steps, batch_size)
+        :param sizes: actual size of each sequence in data
+        :param ignore_end: if True, ignore the END symbol
+        """
+        answer = self.run(session, data, sizes)
+
+        # if the answer is longer than it should, truncate it
+        if len(answer) > len(data):
+            answer = answer[:len(data)]
+
+        hits = answer == data
+        total_items = answer.size
+
+        if ignore_end:
+            non_end = data != Symbol.END
+            hits_non_end = hits[non_end]
+            total_items = np.sum(non_end)
+
+        acc = np.sum(hits_non_end) / total_items
+        return acc

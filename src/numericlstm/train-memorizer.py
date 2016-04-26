@@ -3,7 +3,7 @@
 from __future__ import print_function
 
 """
-Script for training the numeric LSTM.
+Script for training the memorizer autoencoder.
 """
 
 import tensorflow as tf
@@ -11,6 +11,7 @@ import logging
 import argparse
 
 import utils
+import datageneration
 import memorizer
 import config
 
@@ -31,9 +32,9 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=logging.INFO)
 
-    train_set, train_sizes, valid_set, valid_sizes = utils.get_data(args.train,
-                                                                    args.valid,
-                                                                    args.num_time_steps)
+    train_set, train_sizes, valid_set, valid_sizes = datageneration.get_data(args.train,
+                                                                             args.valid,
+                                                                             args.num_time_steps)
     num_batches = int(args.train / args.batch_size)
     logging.info('Training with %d sequences; %d for validation' % (args.train, args.valid))
 
@@ -49,7 +50,7 @@ if __name__ == '__main__':
     accumulated_loss = 0
     for epoch_num in range(args.num_epochs):
         # loop for epochs - each one goes through the whole dataset
-        utils.shuffle_data_and_sizes(train_set, train_sizes)
+        utils.shuffle_data_memorizer(train_set, train_sizes)
         last_batch_idx = 0
 
         for batch_num in range(num_batches):
@@ -68,7 +69,7 @@ if __name__ == '__main__':
 
             if (batch_num + 1) % config.report_interval == 0:
                 avg_loss = accumulated_loss / config.report_interval
-                valid_acc = utils.get_accuracy(model, sess, valid_set, valid_sizes)
+                valid_acc = model.get_accuracy(sess, valid_set, valid_sizes)
 
                 logging.info('Epoch %d, batch %d' % (epoch_num + 1, batch_num + 1))
                 logging.info('Train loss: %.5f' % avg_loss)
