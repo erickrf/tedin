@@ -10,6 +10,26 @@ class AdditionAutoEncoder(numericautoencoder.NumericAutoEncoder):
     Subclass of the numeric autoencoder for modeling the addition operation.
     """
 
+    def run(self, session, first_term, second_term, first_size, second_size):
+        """
+        Run the autoencoder for the given data.
+
+        :param session: tensorflow session
+        :param first_term: numpy array with shape (sequence_size, batch_size)
+        :param second_term: same as first_term
+        :param first_size: numpy array with the actual sequence sizes
+        :param second_size: same as first_size
+        :return: a numpy array with the results, digit by digit, with shape
+            (time_steps, batch_size)
+        """
+        sum_feeds = {self.first_term: first_term,
+                     self.second_term: second_term,
+                     self.first_term_size: first_size,
+                     self.second_term_size: second_size}
+        hidden_state = session.run(self.addition_output, feed_dict=sum_feeds)
+
+        return self.decoder_loop(session, hidden_state)
+
     def compute_l2_loss(self):
         """
         L2 norm of the softmax weights (outputs) plus the L2 of the addition weights

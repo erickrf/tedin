@@ -23,7 +23,8 @@ class NumericAutoEncoder(object):
     memorize and perform arithmetics operations on arbitrary numbers.
     """
 
-    def __init__(self, embedding_size, num_time_steps, embedding_abs_max=1.0, clip_value=1.25):
+    def __init__(self, embedding_size, num_time_steps, initial_learning_rate,
+                 embedding_abs_max=1.0, clip_value=1.25):
         """
         Initialize the encoder/decoder and creates Tensor objects
 
@@ -35,7 +36,7 @@ class NumericAutoEncoder(object):
             be know a priori.
         """
         self.num_time_steps = num_time_steps
-        self.learning_rate = tf.placeholder(tf.float32, name='learning_rate')
+        self.learning_rate = initial_learning_rate
         self.l2_constant = tf.placeholder(tf.float32, name='l2_constant')
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
 
@@ -100,27 +101,28 @@ class NumericAutoEncoder(object):
                                                        self.lstm_cell)
 
         self.output_logits = self.project_output(raw_outputs, False)
-        self._create_training_tensors(clip_value)
+        if self.learning_rate is not None:
+            self._create_training_tensors(clip_value)
         self._create_running_tensors()
 
-    def run(self, session, input_sequence, sequence_size):
+    def run(self):
         """
-        Run the encoder/decoder for the given inputs
+        Subclasses should implement
+        """
+        return NotImplementedError
 
-        :param session: a tensorflow session
-        :param input_sequence: an input array with shape (max_time_steps, batch_size)
-        :param sequence_size: the actual size of each sequence in the batch (the
-            size of the contents before padding)
-        :return: a numpy array with the same shape as input_sequence (the answer)
+    def decoder_loop(self, session, hidden_state):
+        """
+        Start the decoder with the given hidden_state and extract a full
+        output.
+
+        :param session: tensorflow session
+        :param hidden_state: hidden LSTM state
+        :return: the numbers encoded in the hidden state
         """
         answer = []
-        batch_size = input_sequence.shape[1]
+        batch_size = hidden_state.shape[0]
         current_digit = [Symbol.GO] * batch_size
-
-        encoder_feeds = {self.first_term: input_sequence,
-                         self.first_term_size: sequence_size}
-        hidden_state = session.run(self.state_1st_term,
-                                   feed_dict=encoder_feeds)
 
         # this array control which sequences have already been finished by the
         # decoder, i.e., for which ones it already produced the END symbol
