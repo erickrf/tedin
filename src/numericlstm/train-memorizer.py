@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
+from __future__ import print_function, division
 
 """
 Script for training the memorizer autoencoder.
@@ -24,6 +24,8 @@ if __name__ == '__main__':
                         dest='num_time_steps', type=int)
     parser.add_argument('-n', help='Embedding size', default=300,
                         dest='embedding_size', type=int)
+    parser.add_argument('-r', help='Initial learning rate', default=0.1, dest='learning_rate',
+                        type=float)
     parser.add_argument('-b', help='Batch size', default=32, dest='batch_size', type=int)
     parser.add_argument('-e', help='Number of epochs', default=10, dest='num_epochs', type=int)
     parser.add_argument('--train', help='Size of the training set', default=32000, type=int)
@@ -32,14 +34,17 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=logging.INFO)
 
-    train_set, train_sizes, valid_set, valid_sizes = datageneration.get_data(args.train,
-                                                                             args.valid,
-                                                                             args.num_time_steps)
+    datasets = datageneration.generate_memorizer_data(args.train,
+                                                      args.valid,
+                                                      args.num_time_steps)
+    train_set, train_sizes, valid_set, valid_sizes = datasets
+
     num_batches = int(args.train / args.batch_size)
     logging.info('Training with %d sequences; %d for validation' % (args.train, args.valid))
 
     sess = tf.Session()
-    model = memorizer.MemorizerAutoEncoder(args.embedding_size, args.num_time_steps)
+    model = memorizer.MemorizerAutoEncoder(args.embedding_size, args.num_time_steps,
+                                           args.learning_rate)
 
     sess.run(tf.initialize_all_variables())
     saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=1)
@@ -61,8 +66,7 @@ if __name__ == '__main__':
 
             feeds = {model.first_term: batch,
                      model.first_term_size: sizes,
-                     model.l2_constant: 0.0001,
-                     model.learning_rate: 0.1}
+                     model.l2_constant: 0.0001}
 
             _, loss_value = sess.run([model.train_op, model.loss], feed_dict=feeds)
             accumulated_loss += loss_value

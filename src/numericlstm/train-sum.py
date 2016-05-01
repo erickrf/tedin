@@ -27,8 +27,11 @@ if __name__ == '__main__':
                         dest='num_time_steps', type=int)
     parser.add_argument('-n', help='Embedding size', default=300,
                         dest='embedding_size', type=int)
+    parser.add_argument('-r', help='Initial learning rate', default=0.1, dest='learning_rate',
+                        type=float)
     parser.add_argument('-b', help='Batch size', default=32, dest='batch_size', type=int)
     parser.add_argument('-e', help='Number of epochs', default=10, dest='num_epochs', type=int)
+    parser.add_argument('--l2', help='L2 regularization factor', default=1e-4, type=float)
     parser.add_argument('--train', help='Size of the training set', default=32000, type=int)
     parser.add_argument('--valid', help='Size of the validation set', default=2000, type=int)
     args = parser.parse_args()
@@ -50,7 +53,7 @@ if __name__ == '__main__':
     logging.info('Training with %d sequences; %d for validation' % (args.train, args.valid))
 
     sess = tf.Session()
-    model = addition.AdditionAutoEncoder(embedding_size, num_time_steps)
+    model = addition.AdditionAutoEncoder(embedding_size, num_time_steps, args.learning_rate)
 
     sess.run(tf.initialize_all_variables())
     saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=1)
@@ -58,6 +61,7 @@ if __name__ == '__main__':
     logging.info('Initialized the model and all variables. Starting training...')
 
     best_acc = 0
+    min_loss = 100000
     accumulated_loss = 0
     for epoch_num in range(args.num_epochs):
         # loop for epochs - each one goes through the whole dataset
@@ -82,14 +86,16 @@ if __name__ == '__main__':
                      model.second_term: batch_2nd_term,
                      model.second_term_size: batch_2nd_size,
                      model.sum: batch_result,
-                     model.l2_constant: 0.0001,
-                     model.learning_rate: 0.1}
+                     model.l2_constant: args.l2}
 
             _, loss_value = sess.run([model.train_op, model.loss], feed_dict=feeds)
             accumulated_loss += loss_value
 
             if (batch_num + 1) % config.report_interval == 0:
                 avg_loss = accumulated_loss / config.report_interval
+                if avg_loss < min_loss:
+                    min_loss = avg_loss
+                    saver.save(sess, args.save_file)
 
                 logging.info('Epoch %d, batch %d' % (epoch_num + 1, batch_num + 1))
                 logging.info('Train loss: %.5f' % avg_loss)
