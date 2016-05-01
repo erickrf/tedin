@@ -73,7 +73,8 @@ if __name__ == '__main__':
 
             if (batch_num + 1) % config.report_interval == 0:
                 avg_loss = accumulated_loss / config.report_interval
-                valid_acc = model.get_accuracy(sess, valid_set, valid_sizes)
+                valid_answers = model.run(sess, valid_set, valid_sizes)
+                valid_acc = utils.compute_accuracy(valid_set, valid_answers)
 
                 logging.info('Epoch %d, batch %d' % (epoch_num + 1, batch_num + 1))
                 logging.info('Train loss: %.5f' % avg_loss)

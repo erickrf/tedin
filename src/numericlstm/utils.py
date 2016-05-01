@@ -53,6 +53,32 @@ def remove_duplicates(x):
     return unique_x
 
 
+def compute_accuracy(gold, answer, ignore_end=True):
+    """
+    Compute the model accuracy with the given data.
+    :param gold: numpy array with shape (num_time_steps, batch_size)
+    :param answer: system answer in the same format as `gold`
+    :param ignore_end: if True, ignore the END symbol
+    :return: the accuracy as a floating point number
+    """
+    # if the answer is longer than it should, truncate it
+    if len(answer) > len(gold):
+        answer = answer[:len(gold)]
+    # or the opposite
+    total_items = gold.size
+    if len(gold) > len(answer):
+        gold = gold[:len(answer)]
+
+    hits = answer == gold
+    if ignore_end:
+        non_end = gold != Symbol.END
+        hits_non_end = hits[non_end]
+        total_items = np.sum(non_end)
+
+    acc = np.sum(hits_non_end) / total_items
+    return acc
+
+
 def save_parameters(basefilename, embedding_size, num_time_steps):
     """
     Save the arguments used to instantiate a model.

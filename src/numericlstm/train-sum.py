@@ -39,14 +39,18 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
     if args.load_file is not None:
-        params = utils.load_parameters(args.load)
+        params = utils.load_parameters(args.load_file)
         num_time_steps = params['num_time_steps']
         embedding_size = params['embedding_size']
     else:
         num_time_steps = args.num_time_steps
         embedding_size = args.embedding_size
+        utils.save_parameters(args.save_file, embedding_size, num_time_steps)
 
     train_data = dg.generate_addition_data(num_time_steps, args.train)
+    valid_data = dg.generate_addition_data(num_time_steps, args.valid)
+    valid_input = valid_data[:-1]
+    valid_gold = valid_data[-1]
     first_terms, second_terms, first_sizes, second_sizes, results = train_data
 
     num_batches = int(args.train / args.batch_size)
@@ -57,11 +61,13 @@ if __name__ == '__main__':
 
     sess.run(tf.initialize_all_variables())
     saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=1)
-    utils.save_parameters(args.save_file, embedding_size, num_time_steps)
+    if args.load_file:
+        saver.restore(sess, args.load_file)
+        logging.info('Loaded model')
+
     logging.info('Initialized the model and all variables. Starting training...')
 
     best_acc = 0
-    min_loss = 100000
     accumulated_loss = 0
     for epoch_num in range(args.num_epochs):
         # loop for epochs - each one goes through the whole dataset
@@ -93,12 +99,25 @@ if __name__ == '__main__':
 
             if (batch_num + 1) % config.report_interval == 0:
                 avg_loss = accumulated_loss / config.report_interval
-                if avg_loss < min_loss:
-                    min_loss = avg_loss
+                valid_answer = model.run(sess, *valid_input)
+                valid_acc = utils.compute_accuracy(valid_gold, valid_answer)
+
+                # we are effectively running again on the same batch.
+                # but I suppose it is more efficient to do this than to create the
+                # answer array for EVERY training example
+                train_answer = model.run(sess, batch_1st_term, batch_2nd_term,
+                                         batch_1st_size, batch_2nd_size)
+                train_acc = utils.compute_accuracy(batch_result, train_answer)
+                msg = 'Validation accuracy: %f' % valid_acc
+                if valid_acc > best_acc:
+                    best_acc = valid_acc
                     saver.save(sess, args.save_file)
+                    msg += ' (new model saved)'
 
                 logging.info('Epoch %d, batch %d' % (epoch_num + 1, batch_num + 1))
                 logging.info('Train loss: %.5f' % avg_loss)
+                logging.info('Batch accuracy: %f' % train_acc)
+                logging.info(msg)
 
                 accumulated_loss = 0
 

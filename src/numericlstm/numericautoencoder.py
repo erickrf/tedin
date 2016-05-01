@@ -89,6 +89,9 @@ class NumericAutoEncoder(object):
                                                dtype=tf.float32)
 
         two_terms = tf.concat(1, [self.state_1st_term, self.state_2nd_term])
+        # addition_hidden = tf.nn.xw_plus_b(two_terms, self.addition_weights1,
+        #                                   self.addition_bias1)
+        # addition_hidden = tf.nn.relu(addition_hidden)
         self.addition_output = tf.nn.xw_plus_b(two_terms, self.addition_weights,
                                                self.addition_bias)
 
