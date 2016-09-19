@@ -16,14 +16,9 @@ import utils
 import numerals
 import datastructures
 import config
-import resources
 
 
-def create_lda_vectors(pairs):
-    pass
-
-
-def words_in_common(pair, stopwords=None):
+def _word_overlap_proportion(pair, stopwords=None):
     '''
     Return the proportion of words in common in a pair.
     Repeated words are ignored.
@@ -49,18 +44,6 @@ def words_in_common(pair, stopwords=None):
     return (proportion_t, proportion_h)
 
 
-def pipeline_minimal(pairs, model_config):
-    '''
-    Process the pairs and return a numpy array with feature representations.
-
-    The pipeline includes the minimal preprocessing and feature extraction.
-    '''
-    utils.preprocess_minimal(pairs)
-    x = extract_features_minimal(pairs, model_config)
-
-    return x
-
-
 def pipeline_dependency(pairs, model_config):
     '''
     Process the pairs and return a numpy array with feature representations.
@@ -80,18 +63,16 @@ def pipeline_dependency(pairs, model_config):
                       for pair in pairs]
 
 
-def extract_features_minimal(pairs, model_config):
+def word_overlap_proportion(pairs, stopwords):
     '''
-    Extract features from the given pairs to be used in a classifier.
+    Extract the proportion of common words in T and in H.
 
-    Minimalist function. It only extract the proportion of common words.
-
-    :return: a numpy 2-dim array
+    :return: a numpy 2-dim array (num_pairs, 2)
     '''
-    stopwords = resources.load_stopwords(model_config.stopwords_path)
-    features = np.array([words_in_common(pair, stopwords) for pair in pairs])
+    features = np.array([_word_overlap_proportion(pair, stopwords) for pair in pairs])
 
     return features
+
 
 def quantity_agreement(pair):
     '''

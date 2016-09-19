@@ -118,7 +118,7 @@ class Sentence(object):
     '''
     Class to store a sentence with linguistic annotations.
     '''
-    def __init__(self, parser_output, output_format='corenlp'):
+    def __init__(self, parser_output=None, output_format='corenlp'):
         '''
         Initialize a sentence from the output of one of the supported parsers. 
         It checks for the tokens themselves, pos tags, lemmas

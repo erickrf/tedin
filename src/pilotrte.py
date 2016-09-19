@@ -12,6 +12,7 @@ import os
 import cPickle
 
 import utils
+import pipelines
 
 
 def train_models(pairs, config_file):
@@ -37,15 +38,6 @@ def train_models(pairs, config_file):
     return classifier, regressor
 
 
-def save_model(model, dirname, filename):
-    '''
-    Save a model with pickle in the given path.
-    '''
-    output_file = os.path.join(dirname, filename)
-    with open(output_file, 'wb') as f:
-        cPickle.dump(model, f, -1)
-
-
 def set_log(verbose):
     '''
     Set the system-wide logging configuration.
@@ -61,9 +53,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('input', help='RTE XML file for training')
     parser.add_argument('output_dir', help='Directory to save models')
-    parser.add_argument('configuration', 
-                        help='Python file with system configuration (must be'\
-                        'inside "configurations" directory)')
     parser.add_argument('-v', dest='verbose', action='store_true',
                         help='Verbose mode')
     args = parser.parse_args()
@@ -72,10 +61,11 @@ if __name__ == '__main__':
     
     logging.info('Reading pairs from {}'.format(args.input))
     pairs = utils.read_xml(args.input)
-    
-    classifier, regressor = train_models(pairs, args.configuration)
+    pipeline = pipelines.OverlapPipeline()
+
+    logging.info('Training models')
+    pipeline.train_classifier(pairs)
 
     logging.info('Saving models')
-    save_model(classifier, args.output_dir, 'classifier.dat')
-    save_model(regressor, args.output_dir, 'regressor.dat')
+    pipeline.save(args.output_dir)
 

@@ -180,21 +180,27 @@ def write_rte_file(filename, pairs, **attribs):
         f.write(reparsed.toprettyxml('    ', '\n', 'utf-8'))
 
 
-def preprocess_minimal(pairs):
+def tokenize_pairs(pairs, lower):
     '''
-    Apply a minimal preprocessing pipeline.
-    It includes only a tokenizer.
+    Tokenize the pair objects. The list of pairs is modified in-place;
+    each Pair object will have an annotated_t and annotated_h attributes
+    which, in turn, will have the attribute tokens with the list of
+    tokens.
+    :param pairs: list of Pair objects
+    :param lower: whether to convert texts to lowercase
     '''
     for pair in pairs:
-        t = pair.t.lower()
+        if lower:
+            t = pair.t.lower()
+            h = pair.h.lower()
+
         tokens = tokenize_sentence(t, False)
-        s = datastructures.Sentence(None)
+        s = datastructures.Sentence()
         s.tokens = tokens
         pair.annotated_t = s
-        
-        h = pair.h.lower()
+
         tokens = tokenize_sentence(h, False)
-        s = datastructures.Sentence(None)
+        s = datastructures.Sentence()
         s.tokens = tokens
         pair.annotated_h = s
 

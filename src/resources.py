@@ -57,6 +57,7 @@ def _load_unitex_dictionary():
             
     logging.info('Finished')
 
+
 def load_stopwords(path=None):
     '''
     Load the stopwords from a file.
@@ -77,6 +78,7 @@ def load_stopwords(path=None):
     
     stopwords = set(text.splitlines())
     return stopwords
+
 
 def get_lemma(word, pos):
     '''
