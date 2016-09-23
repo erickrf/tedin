@@ -225,20 +225,20 @@ def train_regressor(x, y):
     return regressor
 
 
-def preprocess_dependency(pairs, model_config):
+def preprocess_dependency(pairs, parser):
     '''
     Preprocess the given pairs with a dependency parser.
     
     :param pairs: pairs to be processed
-    :param model_config: general configuration
+    :param parser: which parser to use
     '''
-    if model_config.parser == 'corenlp':
+    if parser == 'corenlp':
         parser_function = external.call_corenlp
         parser_format = 'conll'
-    elif model_config.parser == 'palavras':
+    elif parser == 'palavras':
         parser_function = external.call_palavras
         parser_format = 'palavras'
-    elif model_config.parser == 'malt':
+    elif parser == 'malt':
         parser_function = external.call_malt
         parser_format = 'conll'
     else:

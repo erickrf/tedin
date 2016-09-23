@@ -8,6 +8,8 @@ import abc
 import os
 import cPickle
 
+import utils
+
 
 class BaseConfiguration:
     __metaclass__ = abc.ABCMeta
@@ -20,13 +22,25 @@ class BaseConfiguration:
     def extract_features(self, pairs):
         pass
 
-    @abc.abstractmethod
-    def train_classifier(self, pairs):
-        pass
+    def _load_stopwords(self, stopwords):
+        if stopwords is None:
+            self.stopwords = None
 
-    @abc.abstractmethod
+        elif isinstance(stopwords, list):
+            self.stopwords = stopwords
+        else:
+            with open(stopwords, 'rb') as f:
+                text = unicode(f.read(), 'utf-8')
+            self.stopwords = set(text.splitlines())
+
+    def train_classifier(self, pairs):
+        features = self.extract_features(pairs)
+        labels = utils.extract_classes(pairs)
+        self.classifier.fit(features, labels)
+
     def classify(self, pairs):
-        pass
+        features = self.extract_features(pairs)
+        return self.classifier.predict(features)
 
     def save(self, dirname):
         '''
