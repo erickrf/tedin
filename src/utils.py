@@ -10,12 +10,9 @@ import re
 from xml.etree import cElementTree as ET
 from nltk.tokenize import RegexpTokenizer
 from xml.dom import minidom
-import traceback
-import logging
 import numpy as np
 
 import config
-import external
 import datastructures
 
 
@@ -223,43 +220,4 @@ def train_regressor(x, y):
     regressor.fit(x, y)
     
     return regressor
-
-
-def preprocess_dependency(pairs, parser):
-    '''
-    Preprocess the given pairs with a dependency parser.
-    
-    :param pairs: pairs to be processed
-    :param parser: which parser to use
-    '''
-    if parser == 'corenlp':
-        parser_function = external.call_corenlp
-        parser_format = 'conll'
-    elif parser == 'palavras':
-        parser_function = external.call_palavras
-        parser_format = 'palavras'
-    elif parser == 'malt':
-        parser_function = external.call_malt
-        parser_format = 'conll'
-    else:
-        raise ValueError('Unknown parser: %s' % config.parser)
-    
-    for i, pair in enumerate(pairs):
-        tokens_t = tokenize_sentence(pair.t)
-        tokens_h = tokenize_sentence(pair.h)
-        
-        output_t = parser_function(' '.join(tokens_t))
-        output_h = parser_function(' '.join(tokens_h))
-        
-        try:
-            pair.annotated_t = datastructures.Sentence(output_t, parser_format)
-            pair.annotated_h = datastructures.Sentence(output_h, parser_format)
-        except ValueError as e:
-            tb = traceback.format_exc()
-            logging.error('Error reading parser output:', e)
-            logging.error(tb)
-    
-        find_lexical_alignments(pair)    
-        pairs[i] = pair
-
 

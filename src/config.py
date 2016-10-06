@@ -14,12 +14,16 @@ and external tools that are shared by all configurations.
 # this must be one of corenlp, palavras or malt
 parser = 'corenlp'
 
-corenlp_url = r'http://143.107.183.175'
-corenlp_port = 13388
+# corenlp_url = r'http://143.107.183.175'
+# corenlp_port = 13388
+corenlp_url = 'http://localhost'
+corenlp_port = 9000
 
 # path to the corenlp models inside the server
-corenlp_depparse_path = r'pt-model/dep-parser'
-corenlp_pos_path = r'pt-model/pos-tagger.dat'
+# corenlp_depparse_path = r'pt-model/dep-parser'
+# corenlp_pos_path = r'pt-model/pos-tagger.dat'
+corenlp_depparse_path = r'models/pt-br/dep-parser'
+corenlp_pos_path = 'models/pt-br/pos-tagger.dat'
 
 palavras_endpoint = 'http://143.107.183.175:12680/services/service_palavras_flat.php'
 # URL dentro da rede NILC

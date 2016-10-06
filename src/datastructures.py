@@ -76,7 +76,7 @@ class Token(object):
         return _compat_repr(repr_str)
     
     def __unicode__(self):
-        return u'<Token %s>' % self.text
+        return self.text
     
     def get_dependents(self, relation, single=True):
         '''
@@ -114,6 +114,7 @@ class ConllPos(object):
 
 Dependency = namedtuple('Dependency', ['relation', 'head', 'modifier'])
 
+
 class Sentence(object):
     '''
     Class to store a sentence with linguistic annotations.
@@ -127,12 +128,12 @@ class Sentence(object):
         :param parser_output: if None, an empty Sentence object is created.
         :param output_format: 'corenlp', 'palavras' or 'conll'
         '''
+        self.tokens = []
         if parser_output is None:
             return
         
         output_format = output_format.lower()
-        self.tokens = []
-        
+
         if output_format == 'corenlp':
             self._read_corenlp_output(parser_output)
         elif output_format == 'palavras':
@@ -340,9 +341,11 @@ class Sentence(object):
     
     def _read_corenlp_output(self, corenlp_output):
         '''
-        Internal function to load data from the output of the Stanford corenlp processor.
+        Internal function to load data from the output of the Stanford
+        corenlp processor.
         '''
-        # ignore the first two lines (they contain the number of tokens and the sentence)
+        # ignore the first two lines (they contain the number of tokens
+        # and the sentence)
         lines = corenlp_output.splitlines()[2:]
         
         token_regex = r'Text=(.+) CharacterOffsetBegin.+ PartOfSpeech=(.+)\]'

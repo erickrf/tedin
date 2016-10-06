@@ -137,8 +137,9 @@ def call_corenlp(text):
 
     headers = {'Content-Type': 'text/plain;charset=utf-8'}
     response = requests.post(url, text.encode('utf-8'), headers=headers)
+    response.encoding = 'utf-8'
 
-    # bug: stanford corenlp returns a latin1 string when we supply it with utf-8
-    output = unicode(response.content, 'utf-8')
+    # bug: \0 character appears in the response
+    output = response.text.replace('\0', '')
 
     return output
