@@ -5,11 +5,12 @@ Simple script for RTE. It extracts a few features from the input
 and trains a classifier and regressor models.
 '''
 
+from __future__ import absolute_import
+
 import argparse
 import importlib
 import logging
-import os
-import cPickle
+from six.moves import cPickle
 
 import utils
 import pipelines
@@ -49,10 +50,15 @@ def set_log(verbose):
                         datefmt='%d/%m/%Y %I:%M:%S %p',
                         level=log_level)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('input', help='RTE XML file for training')
+    parser.add_argument('input', help='Preprocessed training data')
     parser.add_argument('output_dir', help='Directory to save models')
+    parser.add_argument('pipeline', help='Which pipeline to use',
+                        choices=['dependency', 'overlap'])
+    parser.add_argument('-s', help='Use stopwords', action='store_true',
+                        dest='use_stopwords')
     parser.add_argument('-v', dest='verbose', action='store_true',
                         help='Verbose mode')
     args = parser.parse_args()
@@ -60,8 +66,13 @@ if __name__ == '__main__':
     set_log(args.verbose)
     
     logging.info('Reading pairs from {}'.format(args.input))
-    pairs = utils.read_xml(args.input)
-    pipeline = pipelines.OverlapPipeline()
+    with open(args.input, 'rb') as f:
+        pairs = cPickle.load(f)
+
+    stopwords = utils.load_stopwords() if args.use_stopwords else None
+    pipeline_class = pipelines.get_pipeline(args.pipeline)
+    pipeline = pipeline_class(stopwords=stopwords)
+    assert isinstance(pipeline, pipelines.BaseConfiguration)
 
     logging.info('Training models')
     pipeline.train_classifier(pairs)

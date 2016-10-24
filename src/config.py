@@ -52,7 +52,8 @@ nlpnet_path_en = r'D:/desenvolvimento/nlpnet/data/dependency'
 stopwords_path = None
 
 # Open Wordnet PT in NT format
-ownpt_path = 'data/own-pt.nt'
+# ownpt_path = 'data/own-pt.nt'
+ownpt_path = 'data/own-pt.pickle'
 
 lda_path = r'data/lda-100/lda.dat'
 tfidf_path = r'data/lda-100/tfidf.dat'

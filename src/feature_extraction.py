@@ -8,7 +8,7 @@ machine learning algorithms.
 '''
 
 from __future__ import division
-import numpy as np
+import nltk
 import logging
 from operator import xor
 
@@ -16,9 +16,10 @@ import utils
 import numerals
 import datastructures
 import config
+import openwordnetpt as own
 
 
-def _word_overlap_proportion(pair, stopwords=None):
+def word_overlap_proportion(pair, stopwords=None):
     '''
     Return the proportion of words in common in a pair.
     Repeated words are ignored.
@@ -34,8 +35,10 @@ def _word_overlap_proportion(pair, stopwords=None):
     if stopwords is None:
         stopwords = set()
 
-    tokens_t = set(token for token in tokens_t if token not in stopwords)
-    tokens_h = set(token for token in tokens_h if token not in stopwords)
+    tokens_t = set(token.lemma
+                   for token in tokens_t if token not in stopwords)
+    tokens_h = set(token.lemma
+                   for token in tokens_h if token not in stopwords)
 
     num_common_tokens = len(tokens_h.intersection(tokens_t))
     proportion_t = num_common_tokens / len(tokens_t)
@@ -44,34 +47,29 @@ def _word_overlap_proportion(pair, stopwords=None):
     return (proportion_t, proportion_h)
 
 
-def pipeline_dependency(pairs, model_config):
+def word_synonym_overlap_proportion(pair, stopwords=None):
     '''
-    Process the pairs and return a numpy array with feature representations.
-
-    :param pairs: the pairs to be processed
-    :param model_config: a configuration object containing
-        the following attributes:
-        * `parser` ('corenlp', 'palavras' or 'malt')
+    Like `word_overlap_proportion` but count wordnet synonyms
+    as matches
     '''
-    utils.preprocess_dependency(pairs, model_config)
+    if stopwords is None:
+        stopwords = set()
 
-    extractors = [dependency_overlap, negation_check, quantity_agreement]
+    alignments = [(token1, token2)
+                  for token1, token2 in pair.lexical_alignments
+                  if token1.lemma not in stopwords
+                  and token2.lemma not in stopwords]
 
-    # some feature extractors return tuples, others return ints
-    # convert each one to numpy and then join them
-    feature_arrays = [[np.array(f(pair)) for f in extractors]
-                      for pair in pairs]
+    num_common_tokens = len(alignments)
+    num_tokens_t = len(set(t for t in pair.annotated_t.tokens
+                           if t not in stopwords))
+    num_tokens_h = len(set(t for t in pair.annotated_h.tokens
+                           if t not in stopwords))
 
+    proportion_t = num_common_tokens / num_tokens_t
+    proportion_h = num_common_tokens / num_tokens_h
 
-def word_overlap_proportion(pairs, stopwords):
-    '''
-    Extract the proportion of common words in T and in H.
-
-    :return: a numpy 2-dim array (num_pairs, 2)
-    '''
-    features = np.array([_word_overlap_proportion(pair, stopwords) for pair in pairs])
-
-    return features
+    return proportion_t, proportion_h
 
 
 def quantity_agreement(pair):
@@ -121,42 +119,60 @@ def _is_negated(verb):
 
     return False
 
-# #TODO: this feature is weird. does it help at all?
-# def matching_verb_arguments(pair, both=True):
-#     '''
-#     Check if there is at least one verb matching in the two sentences and, if so,
-#     its object and objects are the same. In case of a positive result, return 1.
-#     If one sentence contains an argument (subject or object) but the other
-#     doesn't, it also results in 1.
-#
-#     :param both: if True, return a tuple with two values. The first considers
-#     whether T->H and the second, H->T. In other words, if H has an object absent
-#     in T, it would return (0, 1), provided the rest of the verb structure matches.
-#     '''
-#     def match():
-#         pass
-#
-#     for token1, token2 in pair.lexical_alignments:
-#         # check pairs of aligned verbs
-#         if token1.pos != 'VERB' or token2.pos != 'VERB':
-#             continue
-#
-#         # check if the arguments in H have a corresponding one in T
-#         subj_h = token2.get_dependents('nsubj')
-#         if subj_h is not None:
-#             # subjects must match exactly
-#             #TODO: check passives
-#             subj_t = token1.get_dependents('nsubj')
-#             if subj_h.text != subj_t.text:
-#                 return 0
-#
-#         dobj_h = token2.get_dependents('dobj')
-#         adpobj_h = token2.get_dependents('adpobj')
-#
-#         dobj_t = token1.get_dependents('dobj')
-#         adpobj_h = token1.get_dependents('adpobj')
-#
-#     return 0
+#TODO: this feature is weird. does it help at all?
+def matching_verb_arguments(pair, both=True):
+    '''
+    Check if there is at least one verb matching in the two sentences and, if so,
+    its object and subject are the same. In case of a positive result, return 1.
+
+    :param both: if True, return a tuple with two values. The first is 1
+    if T and H have the same subject, T has an object and H not. The second
+    is 1 if both have the same subject, H has an object and T not.
+    '''
+    at_least = None
+
+    for token1, token2 in pair.lexical_alignments:
+
+        # workaround... in openwordnet-pt, "ser" and "ter" share one
+        # synset in which both words don't really mean the exact same thing.
+        # This can lead to many false positives due to their frequencies
+        if (token1.lemma == 'ser' and token2.lemma == 'ter') or \
+        (token1.lemma == 'ter' and token2.lemma == 'ser'):
+            continue
+
+        # check pairs of aligned verbs
+        if token1.pos != 'VERB' or token2.pos != 'VERB':
+            continue
+
+        # check if the arguments in H have a corresponding one in T
+        # due to parser errors, we could have more than one subject or
+        # dobj per verb, but here we take only the first occurrence.
+        subj_t = token1.get_dependent('nsubj')
+        subj_h = token2.get_dependent('nsubj')
+        if subj_h is not None and subj_t is not None:
+            if subj_h.lemma != subj_t.lemma:
+                continue
+
+        dobj_t = token1.get_dependent('dobj')
+        dobj_h = token2.get_dependent('dobj')
+        if dobj_h is None and dobj_t is None:
+            return (1, 1) if both else 1
+
+        if both:
+            if dobj_t is None and dobj_h is not None:
+                at_least = (0, 1)
+            if dobj_t is not None and dobj_h is None:
+                at_least = (1, 0)
+
+        if dobj_t is not None and dobj_h is not None:
+            if dobj_t.lemma == dobj_h.lemma:
+                return (1, 1) if both else 1
+
+    if at_least:
+        return at_least
+
+    return (0, 0) if both else 0
+
 
 def dependency_overlap(pair, both=True):
     '''
@@ -180,6 +196,62 @@ def dependency_overlap(pair, both=True):
         return (ratio_t, ratio_h)
     else:
         return ratio_h
+
+
+def _has_nominalization(sent1, sent2):
+    """
+    Internal helper function. Returns 1 if a verb in sent 1 has a nominalization
+    in sent2, 0 otherwise.
+    :param sent1: datastructures.Sentence
+    :param sent2: datastructures.Sentence
+    """
+    verbs1 = [token.lemma for token in sent1.tokens if token.pos == 'VERB']
+    # lemmas2 = set(token.lemma for token in sent2.tokens)
+    for verb in verbs1:
+        nominalizations = own.find_nominalizations(verb)
+        for nominalization in nominalizations:
+            for token2 in sent2.tokens:
+                if token2.lemma == nominalization and \
+                                token2.dependency_relation == 'dobj':
+                    return 1
+
+    return 0
+
+
+def has_nominalization(pair, both=True):
+    """
+    Check whether a verb in T has a corresponding nominalization in H.
+    If so, return 1.
+    :type pair: datastructures.Pair
+    :param both: if True, also check verbs in H with nouns in T.
+    """
+    own.load_wordnet(config.ownpt_path)
+    sent1 = pair.annotated_t
+    sent2 = pair.annotated_h
+    val1 = _has_nominalization(sent1, sent2)
+
+    if both:
+        val2 = _has_nominalization(sent2, sent1)
+        return val1, val2
+    else:
+        return val1
+
+
+def bleu(pair, both):
+    """
+    Return the BLEU score from the first sentence to the second.
+    If `both` is True, also return the opposite.
+    """
+    tokens1 = [t.text.lower() for t in pair.annotated_t.tokens]
+    tokens2 = [t.text.lower() for t in pair.annotated_h.tokens]
+
+    bleu1 = nltk.translate.bleu([tokens1], tokens2)
+    if both:
+        bleu2 = nltk.translate.bleu([tokens2], tokens1)
+        return bleu1, bleu2
+
+    return bleu1
+
 
 def negation_check(pair):
     '''

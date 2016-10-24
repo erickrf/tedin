@@ -4,9 +4,12 @@
 Configuration for the RTE system based only on word overlap.
 '''
 
-import sklearn.linear_model as linear
+from __future__ import absolute_import
 
-from base_configuration import BaseConfiguration
+import sklearn.linear_model as linear
+import numpy as np
+
+from pipelines.base_configuration import BaseConfiguration
 import feature_extraction as fe
 import utils
 
@@ -24,6 +27,9 @@ class OverlapPipeline(BaseConfiguration):
         self._load_stopwords(stopwords)
         self.classifier = classifier_class(**classifier_parameters)
 
-    def extract_features(self, pairs):
-        utils.tokenize_pairs(pairs, lower=True)
-        return fe.word_overlap_proportion(pairs, self.stopwords)
+    def extract_features(self, pairs, preprocessed=True):
+        if not preprocessed:
+            utils.tokenize_pairs(pairs, lower=True)
+        values = [fe.word_overlap_proportion(pair, self.stopwords)
+                  for pair in pairs]
+        return np.array(values)

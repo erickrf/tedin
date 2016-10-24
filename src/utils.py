@@ -11,9 +11,11 @@ from xml.etree import cElementTree as ET
 from nltk.tokenize import RegexpTokenizer
 from xml.dom import minidom
 import numpy as np
+import nltk
 
 import config
 import datastructures
+import openwordnetpt as own
 
 
 def tokenize_sentence(text, change_quotes=True, change_digits=False):
@@ -51,6 +53,13 @@ def tokenize_sentence(text, change_quotes=True, change_digits=False):
     return tokenizer.tokenize(text)
 
 
+def load_stopwords():
+    """
+    Return a set of stopwords
+    """
+    return set(nltk.corpus.stopwords.words('portuguese'))
+
+
 def find_lexical_alignments(pair):
     '''
     Find the lexical alignments in the pair and write them to a variable
@@ -75,11 +84,13 @@ def find_lexical_alignments(pair):
         token.aligned_to = []
     for token in pair.annotated_h.tokens:
         token.aligned_to = []
-    
+
+    own.load_wordnet(config.ownpt_path)
     for token_t in content_words_t:
         for token_h in content_words_h:
-            # TODO: check synonyms
-            if token_t.lemma == token_h.lemma:
+            same = token_t.lemma == token_h.lemma
+            synonyms = own.are_synonyms(token_t.lemma, token_h.lemma)
+            if same or synonyms:
                 pair.lexical_alignments.append((token_t, token_h))
                 token_t.aligned_to.append(token_h)
                 token_h.aligned_to.append(token_t)

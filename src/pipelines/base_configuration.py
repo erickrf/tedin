@@ -4,6 +4,8 @@
 Base class with pipeline configuration for training models.
 '''
 
+from __future__ import absolute_import
+
 import abc
 import os
 import cPickle
@@ -19,22 +21,34 @@ class BaseConfiguration:
         raise NotImplementedError('This is an abstract class')
 
     @abc.abstractmethod
-    def extract_features(self, pairs):
+    def extract_features(self, pairs, preprocessed=True):
         pass
 
     def _load_stopwords(self, stopwords):
         if stopwords is None:
-            self.stopwords = None
+            self.stopwords = set()
 
         elif isinstance(stopwords, list):
-            self.stopwords = stopwords
+            self.stopwords = set(stopwords)
         else:
-            with open(stopwords, 'rb') as f:
-                text = unicode(f.read(), 'utf-8')
-            self.stopwords = set(text.splitlines())
+            if isinstance(stopwords, basestring):
+                with open(stopwords, 'rb') as f:
+                    text = unicode(f.read(), 'utf-8')
+                self.stopwords = set(text.splitlines())
+            else:
+                self.stopwords = stopwords
 
-    def train_classifier(self, pairs):
-        features = self.extract_features(pairs)
+        self.stopwords.update(['.', ',', ';', ':', '(', ')', "'", '"',
+                               '!', '-', '--'])
+
+    def train_classifier(self, pairs, preprocessed=True):
+        """
+        Extract features and train a classifier.
+        :param pairs: list of `Pair` objects
+        :param preprocessed: whether pairs have already been preprocessed
+        :return:
+        """
+        features = self.extract_features(pairs, preprocessed)
         labels = utils.extract_classes(pairs)
         self.classifier.fit(features, labels)
 

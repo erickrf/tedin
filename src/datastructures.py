@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import unicode_literals
+
 '''
 This module contains data structures used by the related scripts.
 '''
@@ -10,7 +12,7 @@ import six
 from enum import Enum
 from collections import namedtuple
 
-import resources
+import lemmatization
 
 def _compat_repr(repr_string, encoding='utf-8'):
     '''
@@ -55,7 +57,7 @@ class Pair(object):
         '''
         Return both sentences
         '''
-        return u'T: {}\nH: {}'.format(self.t, self.h)
+        return 'T: {}\nH: {}'.format(self.t, self.h)
 
 class Token(object):
     '''
@@ -72,30 +74,47 @@ class Token(object):
         self.head = None 
     
     def __repr__(self):
-        repr_str = u'<Token %s>' % self.text
+        repr_str = '<Token %s, POS=%s>' % (self.text, self.pos)
         return _compat_repr(repr_str)
-    
+
     def __unicode__(self):
         return self.text
-    
-    def get_dependents(self, relation, single=True):
+
+    def get_dependent(self, relation, error_if_many=False):
+        """
+        Return the modifier (syntactic dependents) that has the specified
+        dependency relation. If `error_if_many` is true and there is more
+        than one have the same relation, it raises a ValueError. If there
+        are no dependents with this relation, return None.
+
+        :param relation: the name of the dependency relation
+        :param error_if_many: whether to raise an exception if there is
+            more than one value
+        :return: Token
+        """
+        deps = [dep for dep in self.dependents
+                if dep.dependency_relation == relation]
+
+        if len(deps) == 0:
+            return None
+        elif len(deps) == 1 or not error_if_many:
+            return deps[0]
+        else:
+            msg = 'More than one dependent with relation {} in token {}'.\
+                format(relation, self)
+            raise ValueError(msg)
+
+    def get_dependents(self, relation):
         '''
         Return modifiers (syntactic dependents) that have the specified dependency
         relation.
-        
-        :param single: if True, a single Token is returned, or None. Otherwise, 
-            a list is returned (even if there is only one element). 
+
+        :param relation: the name of the dependency relation
         '''
         deps = [dep for dep in self.dependents 
                 if dep.dependency_relation == relation]
-        
-        if single:
-            if len(deps) > 0:
-                return deps[0]
-            else:
-                return None
-        else:
-            return deps
+
+        return deps
 
 class ConllPos(object):
     '''
@@ -193,7 +212,7 @@ class Sentence(object):
         pos_to_check = ['NOUN', 'VERB', 'ADJ']
         for token in self.tokens:
             if token.pos in pos_to_check:
-                token.lemma = resources.get_lemma(token.text, token.pos)
+                token.lemma = lemmatization.get_lemma(token.text, token.pos)
             else:
                 token.lemma = token.text
     
@@ -313,7 +332,7 @@ class Sentence(object):
             
             lemma = fields[ConllPos.lemma]
             if lemma == '_':
-                lemma = resources.get_lemma(word, pos)
+                lemma = lemmatization.get_lemma(word, pos)
                 
             head = int(fields[ConllPos.dep_head])
             dep_rel = fields[ConllPos.dep_rel]
@@ -357,7 +376,7 @@ class Sentence(object):
             elif line.startswith('['):
                 match = re.search(token_regex, line)
                 text, pos = match.groups()
-                lemma = resources.get_lemma(text, pos)
+                lemma = lemmatization.get_lemma(text, pos)
                 token = Token(text, pos, lemma)
                 self.tokens.append(token)
             

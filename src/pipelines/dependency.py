@@ -5,16 +5,13 @@ RTE configuration based on simple features extracted
 from dependency trees.
 '''
 
+from __future__ import absolute_import
+
 import numpy as np
-import traceback
-import logging
 import sklearn.linear_model as linear
 
-from datastructures import Sentence
-from base_configuration import BaseConfiguration
+from pipelines.base_configuration import BaseConfiguration
 import feature_extraction as fe
-import external
-import utils
 
 
 class DependencyPipeline(BaseConfiguration):
@@ -30,16 +27,26 @@ class DependencyPipeline(BaseConfiguration):
         self._load_stopwords(stopwords)
         self.classifier = classifier_class(**classifier_parameters)
 
-    def extract_features(self, pairs):
-        extractors = [fe.dependency_overlap, fe.negation_check,
-                      fe.quantity_agreement]
+    def extract_features(self, pairs, preprocessed=True):
+        extractors = [lambda p: fe.word_overlap_proportion(p, self.stopwords),
+                      lambda p: fe.matching_verb_arguments(p, False),
+                      lambda p: fe.bleu(p, True),
+                      fe.dependency_overlap,
+                      fe.negation_check,
+                      fe.quantity_agreement,
+                      fe.has_nominalization]
+        all_features = []
 
         # some feature extractors return tuples, others return ints
-        # convert each one to numpy and then join them
-        feature_arrays = [[np.array(f(pair)) for f in extractors]
-                          for pair in pairs]
+        # convert each one to numpy and then ensure all are 2-dim
+        new_shape = (len(pairs), -1)
+        for func in extractors:
+            feature_values = np.array([func(pair) for pair in pairs])
+            feature_values = feature_values.reshape(new_shape)
+            all_features.append(feature_values)
 
-        return feature_arrays
+        features = np.hstack(all_features)
+        return features
 
 
 

@@ -3,22 +3,20 @@
 from __future__ import unicode_literals
 
 '''
-Functions for reading external resources and 
-providing easy access to them.
+Functions for dealing with lemmatization.
 '''
 
 import config
 import logging
 
 unitex_dictionary = None
+udtags2delaf = {'VERB': 'V',
+                'AUX': 'V',
+                'NOUN': 'N',
+                'ADJ': 'A'}
+lemmatizable_delaf_tags = set(udtags2delaf.values())
+lemmatizable_ud_tags = set(udtags2delaf.keys())
 
-# this dictionary maps tags from the Unitex tagset to the Universal
-# dependencies one. Only these POS's need to be mapped
-tag_map = {'V': 'VERB',
-           'N': 'NOUN', 
-           'A': 'ADJ'}
-
-lemmatizable_tags = set(tag_map.values())
 
 def _load_unitex_dictionary():
     '''
@@ -49,11 +47,10 @@ def _load_unitex_dictionary():
             else:
                 pos = morph
             
-            if pos not in tag_map:
+            if pos not in lemmatizable_delaf_tags:
                 continue
-            
-            ud_pos = tag_map[pos]
-            unitex_dictionary[(inflected, ud_pos)] = lemma
+
+            unitex_dictionary[(inflected, pos)] = lemma
             
     logging.info('Finished')
 
@@ -95,10 +92,11 @@ def get_lemma(word, pos):
         logging.error('\\0 in {}'.format(word))
     
     word = word.lower()
-    if pos not in lemmatizable_tags:
+    if pos not in lemmatizable_ud_tags:
         return word
+    delaf_pos = udtags2delaf[pos]
     
-    if (word, pos) not in unitex_dictionary:
+    if (word, delaf_pos) not in unitex_dictionary:
         # a lot of times, this happens with signs like $ or %
         if len(word) == 1:
             return word
@@ -106,22 +104,21 @@ def get_lemma(word, pos):
         # the POS tag could be wrong
         # but nouns and adjectives are more likely to be mistaken for each other
         #TODO: check if it is a good idea to allow changes from noun/adj to verb
-        if pos == 'NOUN':
-            try_these = ['ADJ', 'VERB']
-        elif pos == 'ADJ':
-            try_these = ['NOUN', 'VERB']
+        if delaf_pos == 'N':
+            try_these = ['A', 'V']
+        elif delaf_pos == 'A':
+            try_these = ['N', 'V']
         else:
-            try_these = ['NOUN', 'ADJ']
+            try_these = ['N', 'A']
         
         for other_pos in try_these:            
             if (word, other_pos) in unitex_dictionary:
                 logging.debug('Could not find lemma for word {} with POS {},'\
-                              'but found for POS {}'.format(word, pos, other_pos))
+                              'but found for POS {}'.format(word, delaf_pos, other_pos))
                 return unitex_dictionary[(word, other_pos)]
         
         msg = 'Could not find lemma for word {} (tagged {}, but tried other tags)'
-        logging.info(msg.format(word, pos))
+        logging.info(msg.format(word, delaf_pos))
         return word
         
-    return unitex_dictionary[(word, pos)]
-    
+    return unitex_dictionary[(word, delaf_pos)]

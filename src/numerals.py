@@ -11,7 +11,9 @@ import re
 
 values = {'zero': 0,
           'um': 1,
+          'uma': 2,
           'dois': 2,
+          'duas': 2,
           'três': 3,
           'quatro': 4,
           'cinco': 5,
@@ -50,6 +52,7 @@ values = {'zero': 0,
           'mil': 1000,
 }
 
+
 def get_number(token):
     '''
     Return a number representation in this token. The value might be the
@@ -57,14 +60,20 @@ def get_number(token):
     
     If it's not possible, raise a ValueError.
     '''
-    if re.match(r'\d+', token.text):
-        return int(token.text)
+    text = token.text
+    if re.match(r'[.,\d]+$', text):
+        en_format = text.replace('.', '').replace(',', '.')
+        return float(en_format)
     
     if len(token.dependents) > 0:
-        logging.info('Number token has dependencies, probably compound words. Not treated yet :(')
+        dependents_str = ', '.join(d.text for d in token.dependents)
+        msg = 'Token {} has dependents: {}'.format(text, dependents_str)
+        logging.info(msg.encode('utf-8'))
     
     try:
-        return values[token.text]
+        return values[text.lower()]
     except KeyError:
-        raise ValueError('Can\'t treat this number: {}'.format(token.text))
+        msg = "Can't convert this number to digits: {}".format(text)
+        logging.info(msg.encode('utf-8'))
+        return text
 
