@@ -10,7 +10,6 @@ from __future__ import unicode_literals
 import re
 import six
 from enum import Enum
-from collections import namedtuple
 
 import lemmatization
 
@@ -38,10 +37,13 @@ class Pair(object):
     It is meant to be used as an abstract representation for both.
     '''
     def __init__(self, t, h, id_, entailment, similarity=None):
-        '''
-        :param entailment: boolean
-        :param attribs: extra attributes to be written to the XML
-        '''
+        """
+        :param t: the first sentence as a string
+        :param h: the second sentence as a string
+        :param id_: the id in the dataset. not very important
+        :param entailment: instance of the Entailment enum
+        :param similarity: similarity score as a float
+        """
         self.t = t
         self.h = h
         self.id = id_
@@ -58,6 +60,19 @@ class Pair(object):
         Return both sentences
         '''
         return 'T: {}\nH: {}'.format(self.t, self.h)
+
+    def inverted_pair(self):
+        """
+        Return an inverted version of this pair; i.e., exchange the
+        first and second sentence, as well as the associated information.
+        """
+        p = Pair(self.h, self.t, self.id, self.entailment, self.similarity)
+        p.lexical_alignments = [(t2, t1)
+                                for (t1, t2) in self.lexical_alignments]
+        p.annotated_t = self.annotated_h
+        p.annotated_h = self.annotated_t
+        return p
+
 
 class Token(object):
     '''
@@ -131,7 +146,36 @@ class ConllPos(object):
     dep_head = 6 # dependency head
     dep_rel = 7 # dependency relation
 
-Dependency = namedtuple('Dependency', ['relation', 'head', 'modifier'])
+
+class Dependency(object):
+    """
+    Class to store data about a dependency relation and provide
+    methods for comparison
+    """
+    def __init__(self, label, head, modifier):
+        self.label = label
+        self.head = head
+        self.modifier = modifier
+
+    def get_data(self):
+        head = self.head.lemma if self.head else None
+        return self.label, head, self.modifier.lemma
+
+    def __repr__(self):
+        s = '{}({}, {})'.format(*self.get_data())
+        return _compat_repr(s)
+
+    def __hash__(self):
+        return hash(self.get_data())
+
+    def __eq__(self, other):
+        """
+        Check if the lemmas of head and modifier are the same across
+        two Dependency objects.
+        """
+        if not isinstance(other, Dependency):
+            return False
+        return self.get_data() == other.get_data()
 
 
 class Sentence(object):
@@ -179,7 +223,7 @@ class Sentence(object):
         These tuples are stored in the sentence object as namedtuples
         (relation, head, modifier). They are stored in a set, so duplicates will be lost.
         '''
-        self.dependencies = set()
+        self.dependencies = []
         # TODO: use collapsed dependencies (collapse preposition and/or conjunctions)
         for token in self.tokens:
             # ignore punctuation dependencies
@@ -187,9 +231,9 @@ class Sentence(object):
             if relation == 'p':
                 continue
             
-            head = 'ROOT' if token.head is None else token.head.text.lower()
-            dep = Dependency(relation, head, token.text)
-            self.dependencies.add(dep)
+            head = token.head
+            dep = Dependency(relation, head, token)
+            self.dependencies.append(dep)
     
     def structure_representation(self):
         '''

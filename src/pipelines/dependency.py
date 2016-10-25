@@ -30,7 +30,7 @@ class DependencyPipeline(BaseConfiguration):
     def extract_features(self, pairs, preprocessed=True):
         extractors = [lambda p: fe.word_overlap_proportion(p, self.stopwords),
                       lambda p: fe.matching_verb_arguments(p, False),
-                      lambda p: fe.bleu(p, True),
+                      lambda p: fe.bleu(p, False),
                       fe.dependency_overlap,
                       fe.negation_check,
                       fe.quantity_agreement,

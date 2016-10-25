@@ -36,15 +36,15 @@ def word_overlap_proportion(pair, stopwords=None):
         stopwords = set()
 
     tokens_t = set(token.lemma
-                   for token in tokens_t if token not in stopwords)
+                   for token in tokens_t if token.lemma not in stopwords)
     tokens_h = set(token.lemma
-                   for token in tokens_h if token not in stopwords)
+                   for token in tokens_h if token.lemma not in stopwords)
 
     num_common_tokens = len(tokens_h.intersection(tokens_t))
     proportion_t = num_common_tokens / len(tokens_t)
     proportion_h = num_common_tokens / len(tokens_h)
 
-    return (proportion_t, proportion_h)
+    return proportion_t, proportion_h
 
 
 def word_synonym_overlap_proportion(pair, stopwords=None):
@@ -62,9 +62,9 @@ def word_synonym_overlap_proportion(pair, stopwords=None):
 
     num_common_tokens = len(alignments)
     num_tokens_t = len(set(t for t in pair.annotated_t.tokens
-                           if t not in stopwords))
+                           if t.lemma not in stopwords))
     num_tokens_h = len(set(t for t in pair.annotated_h.tokens
-                           if t not in stopwords))
+                           if t.lemma not in stopwords))
 
     proportion_t = num_common_tokens / num_tokens_t
     proportion_h = num_common_tokens / num_tokens_h
@@ -183,10 +183,10 @@ def dependency_overlap(pair, both=True):
     :type pair: datastructures.Pair
     :param both: if True, return a tuple with the ratio to dependencies in T and H.
     '''
-    # dependencies are stored as a tuple of 3 string: dependency label, head
-    # and modifier. This function doesn't check lemmas or anything.
-    deps_t = pair.annotated_t.dependencies
-    deps_h = pair.annotated_h.dependencies
+    # dependencies are stored as a tuple of dependency label, head
+    # and modifier.
+    deps_t = set(pair.annotated_t.dependencies)
+    deps_h = set(pair.annotated_h.dependencies)
 
     num_common = len(deps_t.intersection(deps_h))
     ratio_h = num_common / len(deps_h)
@@ -242,8 +242,8 @@ def bleu(pair, both):
     Return the BLEU score from the first sentence to the second.
     If `both` is True, also return the opposite.
     """
-    tokens1 = [t.text.lower() for t in pair.annotated_t.tokens]
-    tokens2 = [t.text.lower() for t in pair.annotated_h.tokens]
+    tokens1 = [t.lemma for t in pair.annotated_t.tokens]
+    tokens2 = [t.lemma for t in pair.annotated_h.tokens]
 
     bleu1 = nltk.translate.bleu([tokens1], tokens2)
     if both:

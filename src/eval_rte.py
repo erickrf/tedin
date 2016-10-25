@@ -36,6 +36,45 @@ def eval_regressor(data_dir, x, y):
     print('{:7.2f}   {:8.2f}   {:18.2f}'.format(pearson, spearman, mse))
     
 
+def eval_rte(pairs, pipeline_name, model, use_stopwords):
+    """
+    Evaluate the RTE pipeline.
+    :param pairs: list of Pair objects
+    :param pipeline_name: name of the pipeline
+    :param model: path to saved model
+    :param use_stopwords: whether to use a stopword list
+    """
+    inverted_pairs = [p.inverted_pair() for p in pairs]
+
+    pipeline_class = pipelines.get_pipeline(pipeline_name)
+    stopwords = utils.load_stopwords() if use_stopwords else None
+    pipeline = pipeline_class(stopwords=stopwords)
+
+    assert isinstance(pipeline, pipelines.BaseConfiguration)
+    pipeline.load(model)
+    classifier = pipeline.classifier
+
+    # we classify the pairs in both ways with binary classes (entailment or not)
+    # if both trigger, it is a paraphrase.
+    x = pipeline.extract_features(pairs)
+    x_inv = pipeline.extract_features(inverted_pairs)
+    y = utils.extract_classes(pairs)
+
+    predictions_original = classifier.predict(x)
+    predictions_inverted = classifier.predict(x_inv)
+    final_predictions = utils.combine_paraphrase_predictions(predictions_original,
+                                                             predictions_inverted)
+    macro_f1 = sklearn.metrics.f1_score(y, final_predictions,
+                                        average='macro') * 100
+    accuracy = sklearn.metrics.accuracy_score(y, final_predictions)
+
+    print('RTE evaluation')
+    print('Accuracy\tMacro F1')
+    print('--------\t--------')
+    print('{:8.2%}\t{:8.2f}'.format(accuracy, macro_f1))
+    print()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('input', help='Directory with trained model')
@@ -49,24 +88,5 @@ if __name__ == '__main__':
     with open(args.test_file, 'rb') as f:
         pairs = cPickle.load(f)
 
-    pipeline_class = pipelines.get_pipeline(args.pipeline)
-    stopwords = utils.load_stopwords() if args.use_stopwords else None
-    pipeline = pipeline_class(stopwords=stopwords)
-
-    assert isinstance(pipeline, pipelines.BaseConfiguration)
-    pipeline.load(args.input)
-
-    classifier = pipeline.classifier
-    x = pipeline.extract_features(pairs)
-    y = utils.extract_classes(pairs)
-
-    accuracy = classifier.score(x, y)
-    predicted = classifier.predict(x)
-    macro_f1 = sklearn.metrics.f1_score(y, predicted, average='macro') * 100
-
-    print('RTE evaluation')
-    print('Accuracy\tMacro F1')
-    print('--------\t--------')
-    print('{:8.2%}\t{:8.2f}'.format(accuracy, macro_f1))
-    print()
+    eval_rte(pairs, args.pipeline, args.input, args.use_stopwords)
 

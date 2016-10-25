@@ -10,6 +10,7 @@ from __future__ import absolute_import
 import argparse
 import importlib
 import logging
+from collections import Counter
 from six.moves import cPickle
 
 import utils
@@ -45,7 +46,7 @@ def set_log(verbose):
     
     :type verbose: bool
     '''
-    log_level = logging.INFO if verbose else logging.WARN
+    log_level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(format='%(asctime)s %(message)s',
                         datefmt='%d/%m/%Y %I:%M:%S %p',
                         level=log_level)
@@ -68,6 +69,10 @@ if __name__ == '__main__':
     logging.info('Reading pairs from {}'.format(args.input))
     with open(args.input, 'rb') as f:
         pairs = cPickle.load(f)
+
+    class_count = Counter(p.entailment for p in pairs)
+    logging.debug('Read {} pairs'.format(len(pairs)))
+    logging.debug('Class distribution: {}'.format(class_count))
 
     stopwords = utils.load_stopwords() if args.use_stopwords else None
     pipeline_class = pipelines.get_pipeline(args.pipeline)

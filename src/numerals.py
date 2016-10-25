@@ -68,12 +68,12 @@ def get_number(token):
     if len(token.dependents) > 0:
         dependents_str = ', '.join(d.text for d in token.dependents)
         msg = 'Token {} has dependents: {}'.format(text, dependents_str)
-        logging.info(msg.encode('utf-8'))
+        logging.debug(msg.encode('utf-8'))
     
     try:
         return values[text.lower()]
     except KeyError:
         msg = "Can't convert this number to digits: {}".format(text)
-        logging.info(msg.encode('utf-8'))
+        logging.debug(msg.encode('utf-8'))
         return text
 

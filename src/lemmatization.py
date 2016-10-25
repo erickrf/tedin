@@ -28,10 +28,10 @@ def _load_unitex_dictionary():
     saves memory. 
     '''
     global unitex_dictionary
-    unitex_dictionary = {}
     
     logging.info('Reading Unitex dictionary')
     with open(config.unitex_dictionary_path, 'rb') as f:
+        unitex_dictionary = {}
         for line in f:
             line = unicode(line, 'utf-8').strip()
             # each line is in the format

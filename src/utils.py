@@ -14,7 +14,7 @@ import numpy as np
 import nltk
 
 import config
-import datastructures
+import datastructures as ds
 import openwordnetpt as own
 
 
@@ -103,7 +103,7 @@ def extract_classes(pairs):
     
     :return: a numpy array with values from 0 to num_classes - 1
     '''
-    classes = np.array([pair.entailment.value - 1 for pair in pairs])
+    classes = np.array([pair.entailment.value for pair in pairs])
     return classes
 
 
@@ -115,6 +115,25 @@ def extract_similarities(pairs):
     '''
     z = np.array([p.similarity for p in pairs])
     return z
+
+
+def combine_paraphrase_predictions(predictions1, predictions2):
+    '''
+    Combine two sequences of binary predictions (entailment or none)
+    into one sequence of three way predictions (entailment, none or paraphrase).
+    For any pair, if the second prediction is entailment and the first one
+    is none, the result will be none.
+
+    :param predictions1: 1-d numpy array
+    :param predictions2: 1-d numpy array
+    :return: 1-d numpy array
+    '''
+    ent_value = ds.Entailment.entailment.value
+    idx_paraphrases = np.logical_and(predictions1 == ent_value,
+                                     predictions2 == ent_value)
+    combined = predictions1.copy()
+    combined[idx_paraphrases] = ds.Entailment.paraphrase.value
+    return combined
 
 
 def read_xml(filename):
@@ -135,19 +154,19 @@ def read_xml(filename):
             ent_string = attribs['entailment'].lower()
             
             if ent_string in ['yes', 'entailment']:
-                entailment = datastructures.Entailment.entailment
+                entailment = ds.Entailment.entailment
             elif ent_string == 'paraphrase':
-                entailment = datastructures.Entailment.paraphrase
+                entailment = ds.Entailment.paraphrase
             elif ent_string == 'contradiction':
-                entailment = datastructures.Entailment.contradiction
+                entailment = ds.Entailment.contradiction
             else:
-                entailment = datastructures.Entailment.none
+                entailment = ds.Entailment.none
                         
         elif 'value' in attribs:
             if attribs['value'].lower() == 'true':
-                entailment = datastructures.Entailment.entailment
+                entailment = ds.Entailment.entailment
             else:
-                entailment = datastructures.Entailment.none
+                entailment = ds.Entailment.none
             
         if 'similarity' in attribs:
             similarity = float(attribs['similarity']) 
@@ -155,7 +174,7 @@ def read_xml(filename):
             similarity = None
         
         id_ = int(attribs['id'])
-        pair = datastructures.Pair(t, h, id_, entailment, similarity)
+        pair = ds.Pair(t, h, id_, entailment, similarity)
         pairs.append(pair)
     
     return pairs
