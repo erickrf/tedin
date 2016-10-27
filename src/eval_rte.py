@@ -66,18 +66,18 @@ def eval_rte(pairs, pipeline_name, model):
     predictions_inverted = classifier.predict(x_inv)
     final_predictions = utils.combine_paraphrase_predictions(predictions_original,
                                                              predictions_inverted)
-
-    int_to_name = {1: 'None',
-                   2: 'Entailment',
-                   3: 'Paraphrase'}
-    labels1 = [int_to_name[val] for val in predictions_original]
-    labels2 = [int_to_name[val] for val in predictions_inverted]
-    labels3 = [int_to_name[val] for val in final_predictions]
-    gold_labels = [int_to_name[val] for val in y]
-    text = '\n'.join(','.join(labels)
-                     for labels in zip(labels1, labels2, labels3, gold_labels))
-    with open('bi.csv', 'wb') as f:
-        f.write(text)
+    #
+    # int_to_name = {1: 'None',
+    #                2: 'Entailment',
+    #                3: 'Paraphrase'}
+    # labels1 = [int_to_name[val] for val in predictions_original]
+    # labels2 = [int_to_name[val] for val in predictions_inverted]
+    # labels3 = [int_to_name[val] for val in final_predictions]
+    # gold_labels = [int_to_name[val] for val in y]
+    # text = '\n'.join(','.join(labels)
+    #                  for labels in zip(labels1, labels2, labels3, gold_labels))
+    # with open('bi.csv', 'wb') as f:
+    #     f.write(text)
 
     macro_f1 = sklearn.metrics.f1_score(y, final_predictions,
                                         average='macro') * 100
