@@ -61,12 +61,15 @@ class Pair(object):
         '''
         return 'T: {}\nH: {}'.format(self.t, self.h)
 
-    def inverted_pair(self):
+    def inverted_pair(self, entailment_value=None):
         """
         Return an inverted version of this pair; i.e., exchange the
         first and second sentence, as well as the associated information.
         """
-        p = Pair(self.h, self.t, self.id, self.entailment, self.similarity)
+        if entailment_value is None:
+            entailment_value = self.entailment
+
+        p = Pair(self.h, self.t, self.id, entailment_value, self.similarity)
         p.lexical_alignments = [(t2, t1)
                                 for (t1, t2) in self.lexical_alignments]
         p.annotated_t = self.annotated_h

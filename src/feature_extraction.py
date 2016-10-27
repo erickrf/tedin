@@ -12,7 +12,6 @@ import nltk
 import logging
 from operator import xor
 
-import utils
 import numerals
 import datastructures
 import config
@@ -21,13 +20,11 @@ import openwordnetpt as own
 
 def word_overlap_proportion(pair, stopwords=None):
     '''
-    Return the proportion of words in common in a pair.
-    Repeated words are ignored.
+    Return the proportion of words in common appearing in H.
 
     :type pair: datastructures.Pair
     :type stopwords: set
-    :return: a tuple with the proportion of common words in the first
-        sentence and in the second one
+    :return: the proportion of words in H that also appear in T
     '''
     tokens_t = pair.annotated_t.tokens
     tokens_h = pair.annotated_h.tokens
@@ -174,7 +171,7 @@ def matching_verb_arguments(pair, both=True):
     return (0, 0) if both else 0
 
 
-def dependency_overlap(pair, both=True):
+def dependency_overlap(pair, both=False):
     '''
     Check how many of the dependencies on the pairs match. Return the ratio between
     dependencies in both sentences and those only in H (or also in T if `both`
@@ -218,7 +215,7 @@ def _has_nominalization(sent1, sent2):
     return 0
 
 
-def has_nominalization(pair, both=True):
+def has_nominalization(pair, both=False):
     """
     Check whether a verb in T has a corresponding nominalization in H.
     If so, return 1.

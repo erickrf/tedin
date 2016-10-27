@@ -16,6 +16,9 @@ import utils
 class BaseConfiguration:
     __metaclass__ = abc.ABCMeta
 
+    classifier_filename = 'classifier.pickle'
+    stopwords_filename = 'stopwords.pickle'
+
     def __init__(self):
         self.classifier = None
         raise NotImplementedError('This is an abstract class')
@@ -63,9 +66,13 @@ class BaseConfiguration:
 
         :param dirname: directory where the classifier will be saved.
         '''
-        path = os.path.join(dirname, 'classifier.pickle')
+        path = os.path.join(dirname, self.classifier_filename)
         with open(path, 'wb') as f:
             cPickle.dump(self.classifier, f, -1)
+
+        path = os.path.join(dirname, self.stopwords_filename)
+        with open(path, 'wb') as f:
+            cPickle.dump(self.stopwords, f, -1)
 
     def load(self, dirname):
         '''
@@ -75,6 +82,10 @@ class BaseConfiguration:
 
         :param dirname: directory where the classifier is saved.
         '''
-        path = os.path.join(dirname, 'classifier.pickle')
+        path = os.path.join(dirname, self.classifier_filename)
         with open(path, 'rb') as f:
             self.classifier = cPickle.load(f)
+
+        path = os.path.join(dirname, self.stopwords_filename)
+        with open(path, 'rb') as f:
+            self.stopwords = cPickle.load(f)

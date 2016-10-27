@@ -40,7 +40,7 @@ def preprocess_pairs(pairs, parser, binarize):
     else:
         raise ValueError('Unknown parser: %s' % parser)
 
-    reversed_paraphrases = []
+    inverted_pairs = []
     for i, pair in enumerate(pairs):
         tokens_t = tokenizer.tokenize(pair.t)
         tokens_h = tokenizer.tokenize(pair.h)
@@ -57,13 +57,18 @@ def preprocess_pairs(pairs, parser, binarize):
             logging.error(tb)
 
         utils.find_lexical_alignments(pair)
-        if binarize and pair.entailment == ds.Entailment.paraphrase:
-            pair.entailment = ds.Entailment.entailment
-            reversed_paraphrases.append(pair.inverted_pair())
+        if binarize:
+            if pair.entailment == ds.Entailment.paraphrase:
+                pair.entailment = ds.Entailment.entailment
+                inverted = pair.inverted_pair(ds.Entailment.entailment)
+            else:
+                inverted = pair.inverted_pair(ds.Entailment.none)
+
+            inverted_pairs.append(inverted)
 
         pairs[i] = pair
 
-    pairs.extend(reversed_paraphrases)
+    pairs.extend(inverted_pairs)
 
 
 if __name__ == '__main__':

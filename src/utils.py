@@ -7,6 +7,7 @@ Utility functions
 '''
 
 import re
+from six.moves import cPickle
 from xml.etree import cElementTree as ET
 from nltk.tokenize import RegexpTokenizer
 from xml.dom import minidom
@@ -115,6 +116,40 @@ def extract_similarities(pairs):
     '''
     z = np.array([p.similarity for p in pairs])
     return z
+
+
+def read_pairs(path, add_inverted=False, paraphrase_to_entailment=False):
+    '''
+    Load pickled pairs from the given path.
+    :param path: pickle file path
+    :param add_inverted: augment the set with the inverted pairs
+    :param paraphrase_to_entailment: change paraphrase class to
+        entailment
+    :return: list of pairs
+    '''
+    with open(path, 'rb') as f:
+        pairs = cPickle.load(f)
+
+    if add_inverted:
+        extra_pairs = []
+        for pair in pairs:
+            if pair.entailment == ds.Entailment.paraphrase:
+                ent_value = ds.Entailment.paraphrase
+            else:
+                # inverting None and Entailment classes yields None
+                ent_value = ds.Entailment.none
+
+            inverted = pair.inverted_pair(ent_value)
+            extra_pairs.append(inverted)
+
+        pairs.extend(extra_pairs)
+
+    if paraphrase_to_entailment:
+        for pair in pairs:
+            if pair.entailment == ds.Entailment.paraphrase:
+                pair.entailment = ds.Entailment.entailment
+
+    return pairs
 
 
 def combine_paraphrase_predictions(predictions1, predictions2):

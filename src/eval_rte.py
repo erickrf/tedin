@@ -10,9 +10,11 @@ import argparse
 import os
 import cPickle
 import sklearn
+import numpy as np
 from scipy.stats import pearsonr, spearmanr
 
 import pipelines
+import datastructures as ds
 import utils
 
 
@@ -36,7 +38,7 @@ def eval_regressor(data_dir, x, y):
     print('{:7.2f}   {:8.2f}   {:18.2f}'.format(pearson, spearman, mse))
     
 
-def eval_rte(pairs, pipeline_name, model, use_stopwords):
+def eval_rte(pairs, pipeline_name, model):
     """
     Evaluate the RTE pipeline.
     :param pairs: list of Pair objects
@@ -47,8 +49,7 @@ def eval_rte(pairs, pipeline_name, model, use_stopwords):
     inverted_pairs = [p.inverted_pair() for p in pairs]
 
     pipeline_class = pipelines.get_pipeline(pipeline_name)
-    stopwords = utils.load_stopwords() if use_stopwords else None
-    pipeline = pipeline_class(stopwords=stopwords)
+    pipeline = pipeline_class()
 
     assert isinstance(pipeline, pipelines.BaseConfiguration)
     pipeline.load(model)
@@ -60,10 +61,24 @@ def eval_rte(pairs, pipeline_name, model, use_stopwords):
     x_inv = pipeline.extract_features(inverted_pairs)
     y = utils.extract_classes(pairs)
 
+    # final_predictions = classifier.predict(x)
     predictions_original = classifier.predict(x)
     predictions_inverted = classifier.predict(x_inv)
     final_predictions = utils.combine_paraphrase_predictions(predictions_original,
                                                              predictions_inverted)
+
+    int_to_name = {1: 'None',
+                   2: 'Entailment',
+                   3: 'Paraphrase'}
+    labels1 = [int_to_name[val] for val in predictions_original]
+    labels2 = [int_to_name[val] for val in predictions_inverted]
+    labels3 = [int_to_name[val] for val in final_predictions]
+    gold_labels = [int_to_name[val] for val in y]
+    text = '\n'.join(','.join(labels)
+                     for labels in zip(labels1, labels2, labels3, gold_labels))
+    with open('bi.csv', 'wb') as f:
+        f.write(text)
+
     macro_f1 = sklearn.metrics.f1_score(y, final_predictions,
                                         average='macro') * 100
     accuracy = sklearn.metrics.accuracy_score(y, final_predictions)
@@ -81,12 +96,10 @@ if __name__ == '__main__':
     parser.add_argument('test_file', help='File with preprocessed test data')
     parser.add_argument('pipeline', help='Which pipeline to use',
                         choices=['dependency', 'overlap'])
-    parser.add_argument('-s', help='Use stopwords', action='store_true',
-                        dest='use_stopwords')
     args = parser.parse_args()
 
     with open(args.test_file, 'rb') as f:
         pairs = cPickle.load(f)
 
-    eval_rte(pairs, args.pipeline, args.input, args.use_stopwords)
+    eval_rte(pairs, args.pipeline, args.input)
 
