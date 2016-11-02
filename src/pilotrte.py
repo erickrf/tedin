@@ -72,8 +72,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     set_log(args.verbose)
-    
-    logging.info('Reading pairs from {}'.format(args.input))
     pairs = utils.read_pairs(args.input, args.add_inv, args.bin)
 
     class_count = Counter(p.entailment for p in pairs)
