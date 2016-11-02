@@ -11,6 +11,7 @@ from __future__ import division
 import nltk
 import logging
 from operator import xor
+from scipy.spatial.distance import cdist
 
 import numerals
 import datastructures
@@ -67,6 +68,45 @@ def word_synonym_overlap_proportion(pair, stopwords=None):
     proportion_h = num_common_tokens / num_tokens_h
 
     return proportion_t, proportion_h
+
+
+def soft_word_overlap(pair, wd, embeddings):
+    '''
+    Compute the "soft" word overlap between the sentences. It is
+    defined as the sum of the maximum embedding similarity of
+    each word in one sentence in relation to the other.
+
+    sum_i max_similarity(t_i, h)) / len(t)
+
+    where max_similarity returns the highest similarity value (cosine)
+    of words in H with respect to t_i.
+
+    :param pair: a Pair object
+    :param wd: word dictionary, word -> index
+    :param embeddings: 2-d numpy array
+    :return: return a tuple (similarity1, similarity2)
+    '''
+    embeddings1 = [embeddings[wd[token.text.lower()]]
+                   for token in pair.annotated_t.tokens]
+    embeddings2 = [embeddings[wd[token.text.lower()]]
+                   for token in pair.annotated_h.tokens]
+    dists = cdist(embeddings1, embeddings2, 'cosine')
+
+    # dists has shape (num_tokens1, num_tokens2)
+    # min_dists1 has the minimum distance from each word in T to any in H
+    # min_dists2 is the opposite
+    min_dists1 = dists.min(1)
+    min_dists2 = dists.min(0)
+
+    # if T has a word without anything similar in H, similarities1 will
+    # decrease. And if all words in H have a similar one in T, similarities2
+    # will be high
+    similarities1 = 1 - min_dists1
+    similarities2 = 1 - min_dists2
+
+    mean1 = similarities1.mean()
+    mean2 = similarities2.mean()
+    return mean1, mean2
 
 
 def quantity_agreement(pair):
