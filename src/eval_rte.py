@@ -38,15 +38,24 @@ def eval_regressor(data_dir, x, y):
     print('{:7.2f}   {:8.2f}   {:18.2f}'.format(pearson, spearman, mse))
     
 
-def eval_rte(pairs, pipeline_name, model):
+def eval_rte(data_path, pipeline_name, model, binarize):
     """
     Evaluate the RTE pipeline.
-    :param pairs: list of Pair objects
+    :param data_path: path to saved pairs
     :param pipeline_name: name of the pipeline
     :param model: path to saved model
-    :param use_stopwords: whether to use a stopword list
+    :param binarize: convert paraphrases to entailment (2 class problem)
     """
-    inverted_pairs = [p.inverted_pair() for p in pairs]
+    def print_results(y, pred, name):
+        macro_f1 = sklearn.metrics.f1_score(y, pred,
+                                            average=None).mean() * 100
+        accuracy = sklearn.metrics.accuracy_score(y, pred)
+
+        print('Evaluation on %s' % name)
+        print('Accuracy\tMacro F1')
+        print('--------\t--------')
+        print('{:8.2%}\t{:8.2f}'.format(accuracy, macro_f1))
+        print()
 
     pipeline_class = pipelines.get_pipeline(pipeline_name)
     pipeline = pipeline_class()
@@ -55,17 +64,23 @@ def eval_rte(pairs, pipeline_name, model):
     pipeline.load(model)
     classifier = pipeline.classifier
 
-    # we classify the pairs in both ways with binary classes (entailment or not)
-    # if both trigger, it is a paraphrase.
-    x = pipeline.extract_features(pairs)
-    x_inv = pipeline.extract_features(inverted_pairs)
-    y = utils.extract_classes(pairs)
+    pairs = utils.read_pairs(data_path, True, binarize)
+    half = len(pairs) / 2
+    original_pairs = pairs[:half]
+    inverted_pairs = pairs[half:]
 
-    # final_predictions = classifier.predict(x)
-    predictions_original = classifier.predict(x)
+    x_original = pipeline.extract_features(original_pairs)
+    x_inv = pipeline.extract_features(inverted_pairs)
+    y_all = utils.extract_classes(pairs)
+    y_original = y_all[:half]
+    y_inv = y_all[half:]
+
+    predictions_original = classifier.predict(x_original)
     predictions_inverted = classifier.predict(x_inv)
-    final_predictions = utils.combine_paraphrase_predictions(predictions_original,
-                                                             predictions_inverted)
+    predictions_all = np.append(predictions_original, predictions_inverted)
+    predictions_combined = utils.combine_paraphrase_predictions(predictions_original,
+                                                                predictions_inverted)
+
     #
     # int_to_name = {1: 'None',
     #                2: 'Entailment',
@@ -78,16 +93,11 @@ def eval_rte(pairs, pipeline_name, model):
     #                  for labels in zip(labels1, labels2, labels3, gold_labels))
     # with open('bi.csv', 'wb') as f:
     #     f.write(text)
-
-    macro_f1 = sklearn.metrics.f1_score(y, final_predictions,
-                                        average='macro') * 100
-    accuracy = sklearn.metrics.accuracy_score(y, final_predictions)
-
-    print('RTE evaluation')
-    print('Accuracy\tMacro F1')
-    print('--------\t--------')
-    print('{:8.2%}\t{:8.2f}'.format(accuracy, macro_f1))
-    print()
+    print_results(y_original, predictions_original, 'Original dataset')
+    print_results(y_inv, predictions_inverted, 'Inverted dataset')
+    print_results(y_all, predictions_all, 'Original and inverted overall')
+    if not binarize:
+        print_results(y_original, predictions_combined, 'Original, combining 2-way')
 
 
 if __name__ == '__main__':
@@ -96,10 +106,10 @@ if __name__ == '__main__':
     parser.add_argument('test_file', help='File with preprocessed test data')
     parser.add_argument('pipeline', help='Which pipeline to use',
                         choices=['dependency', 'overlap'])
+    parser.add_argument('-b', action='store_true', dest='binarize',
+                        help='Binarize (convert paraphrase'
+                             ' to entailment)')
     args = parser.parse_args()
 
-    with open(args.test_file, 'rb') as f:
-        pairs = cPickle.load(f)
-
-    eval_rte(pairs, args.pipeline, args.input)
+    eval_rte(args.test_file, args.pipeline, args.input, args.binarize)
 

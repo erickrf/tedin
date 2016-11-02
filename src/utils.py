@@ -9,6 +9,7 @@ Utility functions
 import re
 from six.moves import cPickle
 from xml.etree import cElementTree as ET
+import logging
 from nltk.tokenize import RegexpTokenizer
 from xml.dom import minidom
 import numpy as np
@@ -127,8 +128,10 @@ def read_pairs(path, add_inverted=False, paraphrase_to_entailment=False):
         entailment
     :return: list of pairs
     '''
+    logging.info('Reading pairs...')
     with open(path, 'rb') as f:
         pairs = cPickle.load(f)
+    logging.info('Read %d pairs' % len(pairs))
 
     if add_inverted:
         extra_pairs = []
@@ -143,11 +146,16 @@ def read_pairs(path, add_inverted=False, paraphrase_to_entailment=False):
             extra_pairs.append(inverted)
 
         pairs.extend(extra_pairs)
+    logging.debug('%d total pairs after adding inverted ones' % len(pairs))
 
+    count = 0
     if paraphrase_to_entailment:
         for pair in pairs:
             if pair.entailment == ds.Entailment.paraphrase:
+                count += 1
                 pair.entailment = ds.Entailment.entailment
+
+    logging.debug('Changed %d paraphrases to entailment' % count)
 
     return pairs
 
