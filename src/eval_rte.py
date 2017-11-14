@@ -10,11 +10,11 @@ import argparse
 import os
 import cPickle
 import sklearn
+import logging
 import numpy as np
 from scipy.stats import pearsonr, spearmanr
 
 import pipelines
-import datastructures as ds
 import utils
 
 
@@ -38,13 +38,17 @@ def eval_regressor(data_dir, x, y):
     print('{:7.2f}   {:8.2f}   {:18.2f}'.format(pearson, spearman, mse))
     
 
-def eval_rte(data_path, pipeline_name, model, binarize):
+def eval_rte(data_path, pipeline_name, model, binarize, write_output,
+             embeddings=None, vocabulary=None):
     """
     Evaluate the RTE pipeline.
     :param data_path: path to saved pairs
     :param pipeline_name: name of the pipeline
     :param model: path to saved model
     :param binarize: convert paraphrases to entailment (2 class problem)
+    :param write_output: write system answers to a csv file
+    :param embeddings: path to numpy embeddings file
+    :param vocabulary: path to vocabulary file
     """
     def print_results(y, pred, name):
         macro_f1 = sklearn.metrics.f1_score(y, pred,
@@ -58,13 +62,17 @@ def eval_rte(data_path, pipeline_name, model, binarize):
         print()
 
     pipeline_class = pipelines.get_pipeline(pipeline_name)
-    pipeline = pipeline_class()
+    if issubclass(pipeline_class, pipelines.BaseEmbedding):
+        pipeline = pipeline_class(vocabulary, embeddings)
+    else:
+        pipeline = pipeline_class()
 
     assert isinstance(pipeline, pipelines.BaseConfiguration)
     pipeline.load(model)
     classifier = pipeline.classifier
 
     pairs = utils.read_pairs(data_path, True, binarize)
+    print('Read %d pairs' % len(pairs))
     half = len(pairs) / 2
     original_pairs = pairs[:half]
     inverted_pairs = pairs[half:]
@@ -81,18 +89,20 @@ def eval_rte(data_path, pipeline_name, model, binarize):
     predictions_combined = utils.combine_paraphrase_predictions(predictions_original,
                                                                 predictions_inverted)
 
-    #
-    # int_to_name = {1: 'None',
-    #                2: 'Entailment',
-    #                3: 'Paraphrase'}
-    # labels1 = [int_to_name[val] for val in predictions_original]
-    # labels2 = [int_to_name[val] for val in predictions_inverted]
-    # labels3 = [int_to_name[val] for val in final_predictions]
-    # gold_labels = [int_to_name[val] for val in y]
-    # text = '\n'.join(','.join(labels)
-    #                  for labels in zip(labels1, labels2, labels3, gold_labels))
-    # with open('bi.csv', 'wb') as f:
-    #     f.write(text)
+    if write_output:
+        int_to_name = {1: 'None',
+                       2: 'Entailment',
+                       3: 'Paraphrase'}
+        labels1 = [int_to_name[val] for val in predictions_original]
+        labels2 = [int_to_name[val] for val in predictions_inverted]
+        labels3 = [int_to_name[val] for val in predictions_combined]
+        gold_labels = [int_to_name[val] for val in y_original]
+        text = 'Base,Inverted,Combined,Gold\n'
+        text += '\n'.join(','.join(labels)
+                          for labels in zip(labels1, labels2, labels3, gold_labels))
+        with open('answers.csv', 'wb') as f:
+            f.write(text)
+
     print_results(y_original, predictions_original, 'Original dataset')
     print_results(y_inv, predictions_inverted, 'Inverted dataset')
     print_results(y_all, predictions_all, 'Original and inverted overall')
@@ -105,11 +115,20 @@ if __name__ == '__main__':
     parser.add_argument('input', help='Directory with trained model')
     parser.add_argument('test_file', help='File with preprocessed test data')
     parser.add_argument('pipeline', help='Which pipeline to use',
-                        choices=['dependency', 'overlap'])
+                        choices=['dependency', 'overlap', 'embedding'])
     parser.add_argument('-b', action='store_true', dest='binarize',
                         help='Binarize (convert paraphrase'
                              ' to entailment)')
+    parser.add_argument('-w', action='store_true', dest='write_to_file',
+                        help='Write predictions to file answers.csv')
+    parser.add_argument('-e', '--embeddings', help='Numpy embeddings file (if needed)',
+                        dest='embeddings')
+    parser.add_argument('--vocab', help='Embedding vocabulary (if needed)')
     args = parser.parse_args()
 
-    eval_rte(args.test_file, args.pipeline, args.input, args.binarize)
+    # logging.basicConfig(level=logging.DEBUG)
+
+    eval_rte(args.test_file, args.pipeline, args.input,
+             args.binarize, args.write_to_file, args.embeddings,
+             args.vocab)
 
