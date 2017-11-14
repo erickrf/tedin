@@ -13,6 +13,7 @@ from enum import Enum
 
 import lemmatization
 
+
 def _compat_repr(repr_string, encoding='utf-8'):
     '''
     Function to provide compatibility with Python 2 and 3 with the __repr__
@@ -24,12 +25,14 @@ def _compat_repr(repr_string, encoding='utf-8'):
     else:
         return repr_string
 
+
 # define an enum with possible entailment values
 class Entailment(Enum):
     none = 1
     entailment = 2
     paraphrase = 3
     contradiction = 4
+
 
 class Pair(object):
     '''
