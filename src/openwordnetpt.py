@@ -28,16 +28,21 @@ def load_wordnet(path):
     """
     Load the wordnet graph from the given path. A call to this function
     is necessary before using the other ones in this module.
+    :param path: path to either a .pickle or .nt file. If it is a pickled 
+        file, it should contain a previously serialized wordnet graph.
     """
     global _wn_graph
     if _wn_graph is not None:
         return
-
-    # _wn_graph = rdflib.Graph()
-    # _wn_graph.parse(config.ownpt_path, format='nt')
-
-    with open(path, 'rb') as f:
-        _wn_graph = cPickle.load(f)
+    
+    if path.endswith('.nt'):
+        _wn_graph = rdflib.Graph()
+        _wn_graph.parse(config.ownpt_path, format='nt')
+    elif path.endswith('.pickle'):
+        with open(path, 'rb') as f:
+            _wn_graph = cPickle.load(f)
+    else:
+        raise ValueError('Wordnet file extension is neither .nt or .pickle')
 
 
 def find_synonyms(word):

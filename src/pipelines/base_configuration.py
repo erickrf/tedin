@@ -9,6 +9,7 @@ from __future__ import absolute_import
 import abc
 import os
 import cPickle
+import numpy as np
 
 import utils
 
@@ -23,9 +24,31 @@ class BaseConfiguration:
         self.classifier = None
         raise NotImplementedError('This is an abstract class')
 
-    @abc.abstractmethod
+    @abc.abstractproperty
+    def extractors(self):
+        '''
+        This is a list of functions that can be called with the pair
+        as the only argument. Each one return one or more values.
+        '''
+        return []
+
     def extract_features(self, pairs, preprocessed=True):
-        pass
+        '''
+        Extracts features from the pairs and returns a 2-d
+        numpy array with their values
+        '''
+        all_features = []
+
+        # some feature extractors return tuples, others return ints
+        # convert each one to numpy and then ensure all are 2-dim
+        new_shape = (len(pairs), -1)
+        for func in self.extractors:
+            feature_values = np.array([func(pair) for pair in pairs])
+            feature_values = feature_values.reshape(new_shape)
+            all_features.append(feature_values)
+
+        features = np.hstack(all_features)
+        return features
 
     def _load_stopwords(self, stopwords):
         if stopwords is None:

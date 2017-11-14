@@ -11,6 +11,7 @@ from __future__ import division
 import nltk
 import logging
 from operator import xor
+import numpy as np
 from scipy.spatial.distance import cdist
 
 import numerals
@@ -70,7 +71,7 @@ def word_synonym_overlap_proportion(pair, stopwords=None):
     return proportion_t, proportion_h
 
 
-def soft_word_overlap(pair, wd, embeddings):
+def soft_word_overlap(pair, embeddings):
     '''
     Compute the "soft" word overlap between the sentences. It is
     defined as the sum of the maximum embedding similarity of
@@ -82,14 +83,13 @@ def soft_word_overlap(pair, wd, embeddings):
     of words in H with respect to t_i.
 
     :param pair: a Pair object
-    :param wd: word dictionary, word -> index
-    :param embeddings: 2-d numpy array
+    :param embeddings: a utils.EmbeddingDictionary
     :return: return a tuple (similarity1, similarity2)
     '''
-    embeddings1 = [embeddings[wd[token.text.lower()]]
-                   for token in pair.annotated_t.tokens]
-    embeddings2 = [embeddings[wd[token.text.lower()]]
-                   for token in pair.annotated_h.tokens]
+    embeddings1 = np.array([embeddings[token.text.lower()]
+                            for token in pair.annotated_t.tokens])
+    embeddings2 = np.array([embeddings[token.text.lower()]
+                            for token in pair.annotated_h.tokens])
     dists = cdist(embeddings1, embeddings2, 'cosine')
 
     # dists has shape (num_tokens1, num_tokens2)
@@ -107,6 +107,22 @@ def soft_word_overlap(pair, wd, embeddings):
     mean1 = similarities1.mean()
     mean2 = similarities2.mean()
     return mean1, mean2
+
+
+def sentence_average_embeddings(pair, embeddings):
+    '''
+    Concatenate embeddings of both sentences. Each sentence embedding is obtained
+    as the average of their words.
+
+    :param pair: ds.Pair
+    :type embeddings: utils.EmbeddingDictionary
+    '''
+    embeddings1 = embeddings.get_sentence_embeddings(pair.annotated_t)
+    embeddings2 = embeddings.get_sentence_embeddings(pair.annotated_h)
+    avg1 = embeddings1.mean(0)
+    avg2 = embeddings2.mean(0)
+
+    return np.concatenate((avg1, avg2))
 
 
 def quantity_agreement(pair):
@@ -259,6 +275,7 @@ def has_nominalization(pair, both=False):
     """
     Check whether a verb in T has a corresponding nominalization in H.
     If so, return 1.
+
     :type pair: datastructures.Pair
     :param both: if True, also check verbs in H with nouns in T.
     """

@@ -27,9 +27,13 @@ class OverlapPipeline(BaseConfiguration):
         self._load_stopwords(stopwords)
         self.classifier = classifier_class(**classifier_parameters)
 
-    def extract_features(self, pairs, preprocessed=True):
-        if not preprocessed:
-            utils.tokenize_pairs(pairs, lower=True)
-        values = [fe.word_overlap_proportion(pair, self.stopwords)
-                  for pair in pairs]
-        return np.array(values)
+    @property
+    def extractors(self):
+        return [lambda p: fe.word_overlap_proportion(p, self.stopwords)]
+
+    # def extract_features(self, pairs, preprocessed=True):
+    #     if not preprocessed:
+    #         utils.tokenize_pairs(pairs, lower=True)
+    #     values = [fe.word_overlap_proportion(pair, self.stopwords)
+    #               for pair in pairs]
+    #     return np.array(values)

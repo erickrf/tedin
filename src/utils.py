@@ -11,6 +11,7 @@ from six.moves import cPickle
 from xml.etree import cElementTree as ET
 import logging
 from nltk.tokenize import RegexpTokenizer
+from collections import defaultdict
 from xml.dom import minidom
 import numpy as np
 import nltk
@@ -18,6 +19,55 @@ import nltk
 import config
 import datastructures as ds
 import openwordnetpt as own
+
+
+class EmbeddingDictionary(object):
+    '''
+    Class for storing a word dictionary to embeddings. It treats special
+    cases of OOV words.
+    '''
+    def __init__(self, wd, embeddings, oov_vector=None):
+        '''
+        Create a new EmbeddingDictionary.
+        :param wd: path to vocabulary
+        :param embeddings: path to 2-d numpy array
+        :param oov_vector: vector to be used for OOV words
+            If None, one is created from a normal dist
+        '''
+        logging.info('Reading embeddings...')
+
+        base_embeddings = np.load(embeddings)
+        if oov_vector is None:
+            oov_vector = np.random.normal(base_embeddings.mean(),
+                                          base_embeddings.std(),
+                                          base_embeddings.shape[1])
+
+        # append the OOV vector to the embeddings and make any OOV
+        # word be indexed to it
+        last_index = base_embeddings.shape[0]
+        base_dictionary = read_vocabulary(wd)
+        self.wd = defaultdict(lambda: last_index, base_dictionary)
+        self.embeddings = np.vstack((base_embeddings, oov_vector))
+
+    def __getitem__(self, item):
+        return self.embeddings[self.wd[item]]
+
+    def get_oov_vector(self):
+        return self.embeddings[-1]
+
+    def set_oov_vector(self, vector):
+        self.embeddings[-1] = vector
+
+    def get_sentence_embeddings(self, sentence):
+        '''
+        Return an array with the embeddings of each token in the sentence
+        :param sentence: ds.Sentence
+        :return: numpy array (num_tokens, embedding_size)
+        :rtype: np.ndarray
+        '''
+        indices = [self.wd[token.text.lower()]
+                   for token in sentence.tokens]
+        return self.embeddings[indices]
 
 
 def tokenize_sentence(text, change_quotes=True, change_digits=False):
@@ -177,6 +227,24 @@ def combine_paraphrase_predictions(predictions1, predictions2):
     combined = predictions1.copy()
     combined[idx_paraphrases] = ds.Entailment.paraphrase.value
     return combined
+
+
+def read_vocabulary(path):
+    """
+    Read a file with the vocabulary corresponding to an embedding model.
+
+    :param path: path to the file (should be UTF-8!)
+    :return: a python dictionary mapping words to indices in the
+        embedding matrix
+    """
+    with open(path, 'rb') as f:
+        text = unicode(f.read(), 'utf-8')
+
+    words = text.splitlines()
+    values = range(len(words))
+    word_dict = dict(zip(words, values))
+
+    return word_dict
 
 
 def read_xml(filename):

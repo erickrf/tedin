@@ -7,7 +7,6 @@ from dependency trees.
 
 from __future__ import absolute_import
 
-import numpy as np
 import sklearn.linear_model as linear
 
 from pipelines.base_configuration import BaseConfiguration
@@ -27,7 +26,8 @@ class DependencyPipeline(BaseConfiguration):
         self._load_stopwords(stopwords)
         self.classifier = classifier_class(**classifier_parameters)
 
-    def extract_features(self, pairs, preprocessed=True):
+    @property
+    def extractors(self):
         extractors = [lambda p: fe.word_overlap_proportion(p, self.stopwords),
                       lambda p: fe.matching_verb_arguments(p, False),
                       lambda p: fe.bleu(p, False),
@@ -35,18 +35,4 @@ class DependencyPipeline(BaseConfiguration):
                       fe.negation_check,
                       fe.quantity_agreement,
                       fe.has_nominalization]
-        all_features = []
-
-        # some feature extractors return tuples, others return ints
-        # convert each one to numpy and then ensure all are 2-dim
-        new_shape = (len(pairs), -1)
-        for func in extractors:
-            feature_values = np.array([func(pair) for pair in pairs])
-            feature_values = feature_values.reshape(new_shape)
-            all_features.append(feature_values)
-
-        features = np.hstack(all_features)
-        return features
-
-
-
+        return extractors
