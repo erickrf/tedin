@@ -7,25 +7,12 @@ Functions for calling external NLP tools.
 """
 
 import urllib
-import subprocess
-#import nlpnet
-import nltk
-import tempfile
 import json
 import requests
 
 import config
-import utils
 
 nlpnet_tagger = None
-
-
-def load_senna_tagger():
-    """
-    Load and return the SENNA tagger.
-    Its location in the file system is read from the config module.
-    """
-    return nltk.tag.SennaTagger(config.senna_path)
 
 
 # def load_nlpnet_tagger(language='pt'):
@@ -41,56 +28,96 @@ def load_senna_tagger():
 #     nlpnet_tagger = nlpnet.POSTagger(config.nlpnet_path_pt, language=language)
 #     return nlpnet_tagger
 
-
-def call_malt(text):
+def _is_trivial_paraphrase(exp1, exp2):
     """
-    Call the MALT parser locally and return a parsed sentence.
-    It uses nlpnet internally to POS tag the text.
+    Return True if w1 and w2 differ only in gender and/or number
 
-    :param text: a single sentence
+    :param exp1: tuple/list of strings, expression1
+    :param exp2: tuple/list of strings, expression2
+    :return: boolean
     """
-    nlpnet_tagger = load_nlpnet_tagger()
-    tokens = utils.tokenize_sentence(text)
-    tagged = nlpnet_tagger.tag_tokens(tokens, return_tokens=True)
+    def strip_suffix(word):
+        if word[-2:] == 'os' or word[-2:] == 'as':
+            return word[:-2]
 
-    # temp files for malt parser input and output
-    input_file = tempfile.NamedTemporaryFile(prefix='malt_input.conll',
-                                             dir=tempfile.gettempdir(),
-                                             delete=False)
-    output_file = tempfile.NamedTemporaryFile(prefix='malt_output.conll',
-                                              dir=tempfile.gettempdir(),
-                                              delete=False)
+        if word[-1] in 'aos':
+            return word[:-1]
 
-    for (i, (word, tag)) in enumerate(tagged, start=1):
-        input_str = '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' %\
-            (i, word, '_', tag, tag, '_', '0', 'a', '_', '_')
-        input_file.write(input_str.encode("utf8"))
+        return word
 
-    input_file.write(b'\n')
-    input_file.close()
+    if len(exp1) != len(exp2):
+        return False
 
-    cmd = ['java' ,
-           '-jar', config.malt_jar,
-           '-w'  , config.malt_dir,
-           '-c'  , config.malt_model,
-           '-i'  , input_file.name,
-           '-o'  , output_file.name,
-           '-m'  , 'parse']
+    for w1, w2 in zip(exp1, exp2):
+        w1 = strip_suffix(w1)
+        w2 = strip_suffix(w2)
+        if len(w1) == 0 or len(w2) == 0:
+            if len(w1) == len(w2):
+                continue
+            else:
+                return False
 
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = p.communicate()
-    output_file.close()
+        if w1 != w2 and \
+                not (w1[-1] == 'l' and w2[-1] == 'i' and w1[:-1] == w2[:-1]):
+            return False
 
-    ret_code = p.returncode
-    if ret_code != 0:
-        print 'Return code from MALT parser not 0! Error code {}'.format(ret_code)
-        print stdout
-        print stderr
+    return True
 
-    with open(output_file.name, 'rb') as f:
-        output = unicode(f.read(), 'utf-8')
 
-    return output
+def load_ppdb(path):
+    """
+    Load a paraphrase file from Paraphrase Database.
+
+    :param path: path to the file
+    :return: a nested dictionary containing transformations.
+        each level of the dictionary has one token of the right-hand side of
+        the transformation rule mapping to a tuple (transformations, dict):
+        ex:
+        {'poder': (set(),
+                   {'legislativo': (set('legislatura',
+                                    {})})
+        }
+    """
+    transformations = {}
+    articles = {'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas'}
+
+    def remove_comma_and_article(expression):
+        if len(expression) == 1:
+            return expression
+        if expression[0] == ',':
+            expression = expression[1:]
+        if expression[-1] == ',':
+            expression = expression[:-1]
+        if expression[0] in articles:
+            expression = expression[1:]
+        return expression
+
+    with open(path, 'rb') as f:
+        for line in f:
+            line = line.decode('utf-8')
+            fields = line.split('|||')
+            lhs = fields[1].strip().split()
+            rhs = fields[2].strip().split()
+
+            lhs = tuple(remove_comma_and_article(lhs))
+            rhs = tuple(remove_comma_and_article(rhs))
+
+            # filter out trivial number/gender variations
+            if _is_trivial_paraphrase(lhs, rhs):
+                continue
+
+            # add rhs to the nested dictionary
+            d = transformations
+            for token in rhs:
+                if token in d:
+                    d = d[token]
+
+            if lhs in transformations:
+                transformations[lhs].add(rhs)
+            else:
+                transformations[lhs] = {rhs}
+
+    return transformations
 
 
 def call_palavras(text):
