@@ -6,7 +6,6 @@ from __future__ import unicode_literals
 This module contains data structures used by the related scripts.
 '''
 
-from __future__ import unicode_literals
 import re
 import six
 from enum import Enum

@@ -122,13 +122,16 @@ def find_lexical_alignments(pair):
     :type pair: datastructures.Pair
     '''
     # pronouns aren't content words, but let's pretend they are
-    content_word_tags = set(['NOUN', 'VERB', 'PRON', 'ADJ', 'ADV', 'PNOUN'])
+    content_word_tags = {'NOUN', 'VERB', 'PRON', 'ADJ', 'ADV', 'PNOUN'}
     content_words_t = [token
                        for token in pair.annotated_t.tokens
-                       if token.pos in content_word_tags]
+                       if token.pos in content_word_tags
+                       # own-pt lists ser and ter as synonyms
+                       and token.lemma not in ['ser', 'ter']]
     content_words_h = [token
                        for token in pair.annotated_h.tokens
-                       if token.pos in content_word_tags]
+                       if token.pos in content_word_tags
+                       and token.lemma not in ['ser', 'ter']]
     
     pair.lexical_alignments = []
     
@@ -139,10 +142,20 @@ def find_lexical_alignments(pair):
 
     own.load_wordnet(config.ownpt_path)
     for token_t in content_words_t:
+        nominalizations_t = own.find_nominalizations(token_t)
+
         for token_h in content_words_h:
-            same = token_t.lemma == token_h.lemma
-            synonyms = own.are_synonyms(token_t.lemma, token_h.lemma)
-            if same or synonyms:
+            aligned = False
+            if token_t.lemma == token_h.lemma:
+                aligned = True
+            elif own.are_synonyms(token_t.lemma, token_h.lemma):
+                aligned = True
+            elif token_h in nominalizations_t:
+                aligned = True
+            elif token_t in own.find_nominalizations(token_h):
+                aligned = True
+
+            if aligned:
                 pair.lexical_alignments.append((token_t, token_h))
                 token_t.aligned_to.append(token_h)
                 token_h.aligned_to.append(token_t)
@@ -196,7 +209,7 @@ def read_pairs(path, add_inverted=False, paraphrase_to_entailment=False):
             extra_pairs.append(inverted)
 
         pairs.extend(extra_pairs)
-    logging.debug('%d total pairs after adding inverted ones' % len(pairs))
+        logging.debug('%d total pairs after adding inverted ones' % len(pairs))
 
     count = 0
     if paraphrase_to_entailment:
@@ -205,7 +218,7 @@ def read_pairs(path, add_inverted=False, paraphrase_to_entailment=False):
                 count += 1
                 pair.entailment = ds.Entailment.entailment
 
-    logging.debug('Changed %d paraphrases to entailment' % count)
+        logging.debug('Changed %d paraphrases to entailment' % count)
 
     return pairs
 

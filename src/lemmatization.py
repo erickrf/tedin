@@ -33,7 +33,7 @@ def _load_unitex_dictionary():
     with open(config.unitex_dictionary_path, 'rb') as f:
         unitex_dictionary = {}
         for line in f:
-            line = unicode(line, 'utf-8').strip()
+            line = line.decode('utf-8').strip()
             # each line is in the format
             # inflected_word,lemma.POS:additional_morphological_metadata
             # the morphological metadata is only available for open class words

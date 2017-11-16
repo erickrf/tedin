@@ -24,20 +24,23 @@ nomlex_noun_pred = nomlexns['noun']
 _wn_graph = None
 
 
-def load_wordnet(path):
+def load_wordnet(path, force=False):
     """
     Load the wordnet graph from the given path. A call to this function
     is necessary before using the other ones in this module.
+
     :param path: path to either a .pickle or .nt file. If it is a pickled 
         file, it should contain a previously serialized wordnet graph.
+    :param force: if True, reloads the file even if one has been previously
+        loaded.
     """
     global _wn_graph
-    if _wn_graph is not None:
+    if _wn_graph is not None and not force:
         return
     
     if path.endswith('.nt'):
         _wn_graph = rdflib.Graph()
-        _wn_graph.parse(config.ownpt_path, format='nt')
+        _wn_graph.parse(path, format='nt')
     elif path.endswith('.pickle'):
         with open(path, 'rb') as f:
             _wn_graph = cPickle.load(f)
@@ -49,6 +52,7 @@ def find_synonyms(word):
     """
     Find all synonyms of the given word in the wordnet graph, considering
     all possible synsets.
+
     :return: a set of unicode strings
     """
     synonyms = set()
@@ -115,6 +119,7 @@ def find_synsets(word):
 def get_synset_words(synset):
     '''
     Return the words of a synset
+
     :return: a list of strings
     '''
     words = []
@@ -132,6 +137,7 @@ def get_synset_words(synset):
 def find_nominalizations(word):
     """
     Find and return nominalizations of the given verb.
+
     :return: a list of possible nominalizations, as strings
     """
     word_node = get_word_node(word)

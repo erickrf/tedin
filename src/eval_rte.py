@@ -72,7 +72,6 @@ def eval_rte(data_path, pipeline_name, model, binarize, write_output,
     classifier = pipeline.classifier
 
     pairs = utils.read_pairs(data_path, True, binarize)
-    print('Read %d pairs' % len(pairs))
     half = len(pairs) / 2
     original_pairs = pairs[:half]
     inverted_pairs = pairs[half:]
@@ -86,8 +85,8 @@ def eval_rte(data_path, pipeline_name, model, binarize, write_output,
     predictions_original = classifier.predict(x_original)
     predictions_inverted = classifier.predict(x_inv)
     predictions_all = np.append(predictions_original, predictions_inverted)
-    predictions_combined = utils.combine_paraphrase_predictions(predictions_original,
-                                                                predictions_inverted)
+    predictions_two_way = utils.combine_paraphrase_predictions(
+        predictions_original, predictions_inverted)
 
     if write_output:
         int_to_name = {1: 'None',
@@ -95,7 +94,7 @@ def eval_rte(data_path, pipeline_name, model, binarize, write_output,
                        3: 'Paraphrase'}
         labels1 = [int_to_name[val] for val in predictions_original]
         labels2 = [int_to_name[val] for val in predictions_inverted]
-        labels3 = [int_to_name[val] for val in predictions_combined]
+        labels3 = [int_to_name[val] for val in predictions_two_way]
         gold_labels = [int_to_name[val] for val in y_original]
         text = 'Base,Inverted,Combined,Gold\n'
         text += '\n'.join(','.join(labels)
@@ -107,7 +106,8 @@ def eval_rte(data_path, pipeline_name, model, binarize, write_output,
     print_results(y_inv, predictions_inverted, 'Inverted dataset')
     print_results(y_all, predictions_all, 'Original and inverted overall')
     if not binarize:
-        print_results(y_original, predictions_combined, 'Original, combining 2-way')
+        print_results(y_original, predictions_two_way,
+                      'Original, combining 2-way')
 
 
 if __name__ == '__main__':

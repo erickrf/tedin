@@ -11,7 +11,6 @@ import argparse
 import logging
 from collections import Counter
 import sklearn
-from six.moves import cPickle
 
 import utils
 import pipelines
@@ -68,12 +67,14 @@ if __name__ == '__main__':
                         help='Verbose mode')
     parser.add_argument('--class', help='Choose classifier', default='maxent',
                         choices=['maxent', 'svm'], dest='classifier')
-    parser.add_argument('--add-inv', help='Augment training set with inverted pairs',
+    parser.add_argument('--add-inv',
+                        help='Augment training set with inverted pairs',
                         action='store_true', dest='add_inv')
     parser.add_argument('--bin', action='store_true',
-                        help='Binarize problem (change paraphrase to entailment)')
-    parser.add_argument('-e', '--embeddings', help='Numpy embeddings file (if needed)',
-                        dest='embeddings')
+                        help='Binarize problem '
+                             '(change paraphrase to entailment)')
+    parser.add_argument('-e', '--embeddings', dest='embeddings',
+                        help='Numpy embeddings file (if needed)')
     parser.add_argument('--vocab', help='Embedding vocabulary (if needed)')
     args = parser.parse_args()
     

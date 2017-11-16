@@ -74,9 +74,10 @@ def preprocess_pairs(pairs, parser, binarize):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('input', help='XML file with pairs')
-    parser.add_argument('output', help='File to write output file (pickle format)')
-    parser.add_argument('-b', help='Binarize (turn paraphrases into two entailments)',
-                        action='store_true', dest='binarize')
+    parser.add_argument('output',
+                        help='File to write output file (pickle format)')
+    parser.add_argument('-b', action='store_true', dest='binarize',
+                        help='Binarize (turn paraphrases into two entailments)')
     args = parser.parse_args()
 
     pairs = utils.read_xml(args.input)
