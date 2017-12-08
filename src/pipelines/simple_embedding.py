@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import absolute_import
+
 '''
 RTE configuration based on simple features extracted
 from word embeddings.
 '''
-
-from __future__ import absolute_import
 
 import sklearn.linear_model as linear
 import os
@@ -28,7 +28,7 @@ class BaseEmbedding(BaseConfiguration):
                  classifier_class=linear.LogisticRegression,
                  classifier_parameters={'class_weight': 'balanced'}):
         """
-        Initialize an OverlapPipeline object with the given data.
+        Initialize an BaseEmbedding object with the given data.
 
         :param wd: path to vocabulary file
         :param embeddings: path to numpy embeddings file

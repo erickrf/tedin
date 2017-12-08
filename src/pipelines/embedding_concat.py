@@ -5,7 +5,7 @@ RTE configuration based on concatenating embedding representations
 of two sentences.
 '''
 
-from simple_embedding import BaseEmbedding
+from pipelines.simple_embedding import BaseEmbedding
 import feature_extraction as fe
 
 

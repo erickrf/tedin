@@ -19,6 +19,10 @@ import nltk
 import config
 import datastructures as ds
 import openwordnetpt as own
+import ppdb
+
+
+content_word_tags = {'NOUN', 'VERB', 'ADJ', 'ADV', 'PNOUN'}
 
 
 class EmbeddingDictionary(object):
@@ -29,6 +33,7 @@ class EmbeddingDictionary(object):
     def __init__(self, wd, embeddings, oov_vector=None):
         '''
         Create a new EmbeddingDictionary.
+
         :param wd: path to vocabulary
         :param embeddings: path to 2-d numpy array
         :param oov_vector: vector to be used for OOV words
@@ -61,6 +66,7 @@ class EmbeddingDictionary(object):
     def get_sentence_embeddings(self, sentence):
         '''
         Return an array with the embeddings of each token in the sentence
+
         :param sentence: ds.Sentence
         :return: numpy array (num_tokens, embedding_size)
         :rtype: np.ndarray
@@ -85,7 +91,7 @@ def tokenize_sentence(text, change_quotes=True, change_digits=False):
     if change_quotes:
         text = text.replace('“', '"').replace('”', '"')
     
-    tokenizer_regexp = ur'''(?ux)
+    tokenizer_regexp = r'''(?ux)
     # the order of the patterns is important!!
     (?:[^\W\d_]\.)+|                  # one letter abbreviations, e.g. E.U.A.
     \d+(?:[.,]\d+)*(?:[.,]\d+)|       # numbers in format 999.999.999,99999
@@ -112,6 +118,60 @@ def load_stopwords():
     return set(nltk.corpus.stopwords.words('portuguese'))
 
 
+def find_ppdb_alignments(pair, transformations, max_length):
+    """
+    Find lexical and phrasal alignments in the pair according to transformation
+    rules from the paraphrase database.
+
+    :param pair: Pair
+    :param transformations: TransformationDict
+    """
+    tokens_t = pair.annotated_t.tokens
+    tokens_h = pair.annotated_h.tokens
+    token_texts_t = [token.text.lower() for token in tokens_t]
+    token_texts_h = [token.text.lower() for token in tokens_h]
+    alignments = []
+
+    for i, token in enumerate(tokens_t):
+        # check the maximum length that makes sense to search for
+        # (i.e., so it doesn't go past sentence end)
+        max_possible_length = min(len(tokens_t) - i, max_length)
+        for length in range(1, max_possible_length):
+            if length == 1 and token.pos not in content_word_tags:
+                continue
+
+            lhs = [token for token in token_texts_t[i:i + length]]
+            rhs_rules = transformations[lhs][0]
+            if not rhs_rules:
+                continue
+
+            for rule in rhs_rules:
+                index = ppdb.search(token_texts_h, rule)
+                if index == -1:
+                    continue
+                alignment = (lhs, tokens_h[index:index + len(rule)])
+                alignments.append(alignment)
+
+    return alignments
+
+
+def filter_words_by_pos(tokens, tags=None):
+    """
+    Filter out words based on their POS tags.
+
+    If no set of tags is provided, a default of content tags is used:
+    {'NOUN', 'VERB', 'ADJ', 'ADV', 'PNOUN'}
+
+    :param tokens: list of datastructures.Token objects
+    :param tags: optional set of allowed tags
+    :return: list of the tokens having the allowed tokens
+    """
+    if tags is None:
+        tags = content_word_tags
+
+    return [token for token in tokens if token.pos in tags]
+
+
 def find_lexical_alignments(pair):
     '''
     Find the lexical alignments in the pair and write them to a variable
@@ -123,15 +183,14 @@ def find_lexical_alignments(pair):
     '''
     # pronouns aren't content words, but let's pretend they are
     content_word_tags = {'NOUN', 'VERB', 'PRON', 'ADJ', 'ADV', 'PNOUN'}
-    content_words_t = [token
-                       for token in pair.annotated_t.tokens
-                       if token.pos in content_word_tags
+    content_words_t = [token for token in filter_words_by_pos(
+                            pair.annotated_t.tokens, content_word_tags)
                        # own-pt lists ser and ter as synonyms
-                       and token.lemma not in ['ser', 'ter']]
-    content_words_h = [token
-                       for token in pair.annotated_h.tokens
-                       if token.pos in content_word_tags
-                       and token.lemma not in ['ser', 'ter']]
+                       if token.lemma not in ['ser', 'ter']]
+
+    content_words_h = [token for token in filter_words_by_pos(
+                            pair.annotated_h.tokens, content_word_tags)
+                       if token.lemma not in ['ser', 'ter']]
     
     pair.lexical_alignments = []
     
@@ -185,6 +244,7 @@ def extract_similarities(pairs):
 def read_pairs(path, add_inverted=False, paraphrase_to_entailment=False):
     '''
     Load pickled pairs from the given path.
+
     :param path: pickle file path
     :param add_inverted: augment the set with the inverted pairs
     :param paraphrase_to_entailment: change paraphrase class to
@@ -346,12 +406,12 @@ def tokenize_pairs(pairs, lower):
             h = pair.h.lower()
 
         tokens = tokenize_sentence(t, False)
-        s = datastructures.Sentence()
+        s = ds.Sentence()
         s.tokens = tokens
         pair.annotated_t = s
 
         tokens = tokenize_sentence(h, False)
-        s = datastructures.Sentence()
+        s = ds.Sentence()
         s.tokens = tokens
         pair.annotated_h = s
 

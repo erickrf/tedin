@@ -8,7 +8,7 @@ Script to evaluate a trained sklearn model on a RTE dataset.
 
 import argparse
 import os
-import cPickle
+from six.moves import cPickle
 import sklearn
 import logging
 import numpy as np
@@ -62,7 +62,8 @@ def eval_rte(data_path, pipeline_name, model, binarize, write_output,
         print()
 
     pipeline_class = pipelines.get_pipeline(pipeline_name)
-    if issubclass(pipeline_class, pipelines.BaseEmbedding):
+    if issubclass(pipeline_class, pipelines.BaseEmbedding) or \
+                    pipeline_class == pipelines.SimilarityPipeline:
         pipeline = pipeline_class(vocabulary, embeddings)
     else:
         pipeline = pipeline_class()
@@ -115,7 +116,7 @@ if __name__ == '__main__':
     parser.add_argument('input', help='Directory with trained model')
     parser.add_argument('test_file', help='File with preprocessed test data')
     parser.add_argument('pipeline', help='Which pipeline to use',
-                        choices=['dependency', 'overlap', 'embedding'])
+                        choices=pipelines.pipeline_names)
     parser.add_argument('-b', action='store_true', dest='binarize',
                         help='Binarize (convert paraphrase'
                              ' to entailment)')

@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import absolute_import
+
 '''
 Base class with pipeline configuration for training models.
 '''
 
-from __future__ import absolute_import
-
 import abc
 import os
-import cPickle
+from six.moves import cPickle
 import numpy as np
 
 import utils
@@ -37,6 +37,9 @@ class BaseConfiguration:
         Extracts features from the pairs and returns a 2-d
         numpy array with their values
         '''
+        for pair in pairs:
+            pair.preprocess_content_tokens(self.stopwords)
+
         all_features = []
 
         # some feature extractors return tuples, others return ints
@@ -59,7 +62,7 @@ class BaseConfiguration:
         else:
             if isinstance(stopwords, basestring):
                 with open(stopwords, 'rb') as f:
-                    text = unicode(f.read(), 'utf-8')
+                    text = f.read().decode('utf-8')
                 self.stopwords = set(text.splitlines())
             else:
                 self.stopwords = stopwords

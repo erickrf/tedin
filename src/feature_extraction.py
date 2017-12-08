@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import unicode_literals
+from __future__ import unicode_literals, division
 
 '''
 Functions to extract features from the pairs, to be used by
 machine learning algorithms.
 '''
 
-from __future__ import division
 import nltk
 import logging
 from operator import xor
 import numpy as np
 from scipy.spatial.distance import cdist
+import zss
 
 import numerals
 import datastructures
@@ -46,6 +46,31 @@ def word_overlap_proportion(pair, stopwords=None):
     return proportion_t, proportion_h
 
 
+def simple_tree_distance(pair):
+    '''
+    Extract a simple tree edit distance (TED) value.
+
+    Nodes are considered to match if they have the same dependency label and
+    lemma.
+    '''
+    def get_children(node):
+        return node.dependents
+
+    def get_label(node):
+        return node.lemma, node.dependency_relation
+
+    def label_dist(label1, label2):
+        return int(label1 != label2)
+
+    tree_t = pair.annotated_t
+    tree_h = pair.annotated_h
+    root_t = tree_t.root
+    root_h = tree_h.root
+
+    return zss.simple_distance(root_t, root_h, get_children,
+                               get_label, label_dist)
+
+
 def word_synonym_overlap_proportion(pair, stopwords=None):
     '''
     Like `word_overlap_proportion` but count wordnet synonyms
@@ -74,7 +99,7 @@ def word_synonym_overlap_proportion(pair, stopwords=None):
 def soft_word_overlap(pair, embeddings):
     '''
     Compute the "soft" word overlap between the sentences. It is
-    defined as the sum of the maximum embedding similarity of
+    defined as the average of the maximum embedding similarity of
     each word in one sentence in relation to the other.
 
     sum_i max_similarity(t_i, h)) / len(t)
@@ -86,10 +111,10 @@ def soft_word_overlap(pair, embeddings):
     :param embeddings: a utils.EmbeddingDictionary
     :return: return a tuple (similarity1, similarity2)
     '''
-    embeddings1 = np.array([embeddings[token.text.lower()]
-                            for token in pair.annotated_t.tokens])
-    embeddings2 = np.array([embeddings[token.text.lower()]
-                            for token in pair.annotated_h.tokens])
+    embeddings1 = np.array([embeddings[token]
+                            for token in pair.annotated_t.lower_content_tokens])
+    embeddings2 = np.array([embeddings[token]
+                            for token in pair.annotated_h.lower_content_tokens])
     dists = cdist(embeddings1, embeddings2, 'cosine')
 
     # dists has shape (num_tokens1, num_tokens2)
@@ -158,6 +183,7 @@ def quantity_agreement(pair):
 
     return 1
 
+
 def _is_negated(verb):
     '''
     Check if a verb is negated in the syntactic tree. This function searches its
@@ -171,6 +197,7 @@ def _is_negated(verb):
             return True
 
     return False
+
 
 #TODO: this feature is weird. does it help at all?
 def matching_verb_arguments(pair, both=True):
@@ -305,6 +332,17 @@ def bleu(pair, both):
         return bleu1, bleu2
 
     return bleu1
+
+
+def length_proportion(pair):
+    """
+    Compute the proportion of the size of T to H.
+
+    If stopwords are given, they are removed prior the computation.
+    """
+    length_t = len(pair.annotated_t.lower_content_tokens)
+    length_h = len(pair.annotated_h.lower_content_tokens)
+    return length_t / length_h
 
 
 def negation_check(pair):

@@ -34,7 +34,8 @@ def create_pipeline(args):
     arguments = {'stopwords': stopwords,
                  'classifier_class': classifier_class,
                  'classifier_parameters': {'class_weight': 'balanced'}}
-    if issubclass(pipeline_class, pipelines.BaseEmbedding):
+    if issubclass(pipeline_class, pipelines.BaseEmbedding) or \
+            pipeline_class == pipelines.SimilarityPipeline:
         arguments['wd'] = args.vocab
         arguments['embeddings'] = args.embeddings
 
@@ -60,7 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('input', help='Preprocessed training data')
     parser.add_argument('output_dir', help='Directory to save models')
     parser.add_argument('pipeline', help='Which pipeline to use',
-                        choices=['dependency', 'overlap', 'embedding'])
+                        choices=pipelines.pipeline_names)
     parser.add_argument('-s', help='Use stopwords', action='store_true',
                         dest='use_stopwords')
     parser.add_argument('-v', dest='verbose', action='store_true',

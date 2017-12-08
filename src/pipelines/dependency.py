@@ -19,7 +19,7 @@ class DependencyPipeline(BaseConfiguration):
                  classifier_class=linear.LogisticRegression,
                  classifier_parameters={'class_weight': 'balanced'}):
         """
-        Initialize an OverlapPipeline object with the given data.
+        Initialize a DependencyPipeline object with the given data.
 
         :param stopwords: list of stopwords or path to a file
         """

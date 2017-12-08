@@ -63,6 +63,16 @@ class Pair(object):
         '''
         return 'T: {}\nH: {}'.format(self.t, self.h)
 
+    def preprocess_content_tokens(self, stopwords):
+        """
+        Preprocesses the two sentences in order to extract content tokens (i.e.,
+        not in stopwords) and lowercase them.
+
+        :param stopwords: set
+        """
+        self.annotated_h.find_lower_content_tokens(stopwords)
+        self.annotated_t.find_lower_content_tokens(stopwords)
+
     def inverted_pair(self, entailment_value=None):
         """
         Return an inverted version of this pair; i.e., exchange the
@@ -99,6 +109,9 @@ class Token(object):
 
     def __unicode__(self):
         return self.text
+
+    def __str__(self):
+        return _compat_repr(self.text)
 
     def get_dependent(self, relation, error_if_many=False):
         """
@@ -212,12 +225,27 @@ class Sentence(object):
             raise ValueError('Unknown format: %s' % output_format)
         
         self.extract_dependency_tuples()
-    
+        self.lower_content_tokens = []
+
+    def find_lower_content_tokens(self, stopwords):
+        '''
+        Store the lower case content tokens (i.e., not in stopwords) for faster
+        processing.
+
+        :param stopwords: set
+        '''
+        self.lower_content_tokens = [token.text.lower()
+                                     for token in self.tokens
+                                     if token.lemma not in stopwords]
+
     def __unicode__(self):
         return ' '.join(unicode(t) for t in self.tokens)
+
+    def __str__(self):
+        return ' '.join(str(t) for t in self.tokens)
     
     def __repr__(self):
-        repr_str = unicode(self)
+        repr_str = str(self)
         return _compat_repr(repr_str)
     
     def extract_dependency_tuples(self):
@@ -449,4 +477,3 @@ class Sentence(object):
                     head.dependents.append(modifier)
                 else:
                     self.root = modifier
-        
