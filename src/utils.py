@@ -201,7 +201,7 @@ def find_lexical_alignments(pair):
 
     own.load_wordnet(config.ownpt_path)
     for token_t in content_words_t:
-        nominalizations_t = own.find_nominalizations(token_t)
+        nominalizations_t = own.find_nominalizations(token_t.lemma)
 
         for token_h in content_words_h:
             aligned = False
@@ -209,9 +209,9 @@ def find_lexical_alignments(pair):
                 aligned = True
             elif own.are_synonyms(token_t.lemma, token_h.lemma):
                 aligned = True
-            elif token_h in nominalizations_t:
+            elif token_h.lemma in nominalizations_t:
                 aligned = True
-            elif token_t in own.find_nominalizations(token_h):
+            elif token_t.lemma in own.find_nominalizations(token_h.lemma):
                 aligned = True
 
             if aligned:
@@ -389,31 +389,6 @@ def write_rte_file(filename, pairs, **attribs):
     reparsed = minidom.parseString(xml_string)
     with open(filename, 'wb') as f:
         f.write(reparsed.toprettyxml('    ', '\n', 'utf-8'))
-
-
-def tokenize_pairs(pairs, lower):
-    '''
-    Tokenize the pair objects. The list of pairs is modified in-place;
-    each Pair object will have an annotated_t and annotated_h attributes
-    which, in turn, will have the attribute tokens with the list of
-    tokens.
-    :param pairs: list of Pair objects
-    :param lower: whether to convert texts to lowercase
-    '''
-    for pair in pairs:
-        if lower:
-            t = pair.t.lower()
-            h = pair.h.lower()
-
-        tokens = tokenize_sentence(t, False)
-        s = ds.Sentence()
-        s.tokens = tokens
-        pair.annotated_t = s
-
-        tokens = tokenize_sentence(h, False)
-        s = ds.Sentence()
-        s.tokens = tokens
-        pair.annotated_h = s
 
 
 def train_classifier(x, y):
