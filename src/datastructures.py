@@ -63,23 +63,15 @@ class Pair(object):
         '''
         return 'T: {}\nH: {}'.format(self.t, self.h)
 
-    def preprocess_content_tokens(self, stopwords):
-        """
-        Preprocesses the two sentences in order to extract content tokens (i.e.,
-        not in stopwords) and lowercase them.
-
-        :param stopwords: set
-        """
-        self.annotated_h.find_lower_content_tokens(stopwords)
-        self.annotated_t.find_lower_content_tokens(stopwords)
-
-    def inverted_pair(self, entailment_value=None):
+    def inverted_pair(self):
         """
         Return an inverted version of this pair; i.e., exchange the
         first and second sentence, as well as the associated information.
         """
-        if entailment_value is None:
-            entailment_value = self.entailment
+        if self.entailment == Entailment.paraphrase:
+            entailment_value = Entailment.paraphrase
+        else:
+            entailment_value = Entailment.none
 
         p = Pair(self.h, self.t, self.id, entailment_value, self.similarity)
         p.lexical_alignments = [(t2, t1)
@@ -94,7 +86,8 @@ class Token(object):
     Simple data container class representing a token and its linguistic
     annotations.
     '''
-    def __init__(self, text, pos, lemma=None):
+    def __init__(self, num, text, pos, lemma=None):
+        self.id = num  # sequential id in the sentence
         self.text = text
         self.pos = pos
         self.lemma = lemma
@@ -200,16 +193,18 @@ class Sentence(object):
     '''
     Class to store a sentence with linguistic annotations.
     '''
-    def __init__(self, parser_output=None, output_format='corenlp'):
+    def __init__(self, text, parser_output=None, output_format='corenlp'):
         '''
         Initialize a sentence from the output of one of the supported parsers. 
         It checks for the tokens themselves, pos tags, lemmas
         and dependency annotations.
-        
+
+        :param text: The non-tokenized text of the sentence
         :param parser_output: if None, an empty Sentence object is created.
         :param output_format: 'corenlp', 'palavras' or 'conll'
         '''
         self.tokens = []
+        self.text = text
         if parser_output is None:
             return
         
@@ -225,7 +220,7 @@ class Sentence(object):
             raise ValueError('Unknown format: %s' % output_format)
         
         self.extract_dependency_tuples()
-        self.lower_content_tokens = []
+        self.lower_content_tokens = None
 
     def find_lower_content_tokens(self, stopwords):
         '''
@@ -274,9 +269,10 @@ class Sentence(object):
         '''
         lines = []
         for token in self.tokens:
-            head = token.head.text if token.head is not None else 'root'
+            head = token.head.id if token.head is not None else 0
             lemma = token.lemma if token.lemma is not None else '_'
-            line = '{token.text}\t\t{lemma}\t\t{token.pos}\t\t{head}\t\t{token.dependency_relation}'
+            line = '{token.id}\t\t{token.text}\t\t{lemma}\t\t{token.pos}\t\t' \
+                   '{head}\t\t{token.dependency_relation}'
             line = line.format(token=token, lemma=lemma, head=head)
             lines.append(line)
         
@@ -295,9 +291,10 @@ class Sentence(object):
     
     def _read_palavras_output(self, palavras_output):
         '''
-        Internal function to load data from the output of the Palavras parser for Portuguese.
+        Internal function to load data from the output of the Palavras parser
+        for Portuguese.
         '''
-        palavras_output = unicode(palavras_output, 'utf-8')
+        palavras_output = palavras_output.decode('utf-8')
         lines = palavras_output.splitlines()
         dependencies = {}
         
@@ -308,7 +305,8 @@ class Sentence(object):
             
             parts = line.split()
             
-            # punctuation usually only has the token preceded by $ and the dep rel
+            # punctuation usually only has the token preceded by $ and the
+            # dep rel
             if len(parts) == 2:
                 token = self._read_palavras_punctuation(parts, dependencies)
             else: 
@@ -344,12 +342,13 @@ class Sentence(object):
         while parts[index][0] == '<':
             index += 1
         pos = parts[index]
-        token = Token(text, pos, lemma)
+        token = Token(None, text, pos, lemma)
         
         dep_rel = parts[-2]
         token.dependency_relation = dep_rel
         
-        # store dependency information. we add it to the token objects after all have been created
+        # store dependency information. we add it to the token objects after
+        # all have been created
         head, modifier = self._read_palavras_dependency(parts[-1])
         dependencies[modifier] = head
         
@@ -369,7 +368,7 @@ class Sentence(object):
         dep_rel = 'punct'
         head, modifier = self._read_palavras_dependency(parts[1])
         dependencies[modifier] = head
-        token = Token(text, pos, text)
+        token = Token(None, text, pos, text)
         token.dependency_relation = dep_rel
         
         return token
@@ -400,7 +399,8 @@ class Sentence(object):
             fields = line.split()
             if len(fields) == 0:
                 break
-            
+
+            id_ = fields[ConllPos.id]
             word = fields[ConllPos.word]
             pos = fields[ConllPos.pos]
             if pos == '_':
@@ -417,7 +417,7 @@ class Sentence(object):
             # -1 because tokens are numbered from 1
             head -= 1
             
-            token = Token(word, pos, lemma)
+            token = Token(id_, word, pos, lemma)
             token.dependency_relation = dep_rel
             
             self.tokens.append(token)
@@ -446,6 +446,7 @@ class Sentence(object):
         
         token_regex = r'Text=(.+) CharacterOffsetBegin.+ PartOfSpeech=(.+)\]'
         dependency_regex = r'(\w+)\(.+-(\d+), .+-(\d+)\)'
+        token_num = 1
         for line in lines:
             if line.strip() == '':
                     continue
@@ -454,8 +455,9 @@ class Sentence(object):
                 match = re.search(token_regex, line)
                 text, pos = match.groups()
                 lemma = lemmatization.get_lemma(text, pos)
-                token = Token(text, pos, lemma)
+                token = Token(token_num, text, pos, lemma)
                 self.tokens.append(token)
+                token_num += 1
             
             else:
                 # dependency information
