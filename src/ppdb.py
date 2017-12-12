@@ -7,7 +7,10 @@ Classes and functions for dealing with data from the paraphrase database (PPDB)
 """
 
 from six import string_types
-from collections import defaultdict
+from six.moves import cPickle
+
+
+_ppdb_dict = None
 
 
 class TransformationDict(dict):
@@ -194,11 +197,17 @@ def _is_trivial_paraphrase(exp1, exp2):
     return True
 
 
-def load_ppdb(path):
+def load_ppdb(path, force=False):
     """
     Load a paraphrase file from Paraphrase Database.
 
+    A call to this function is necessary before using the other ones in this
+    module. Calls after the module has been loaded have no effect, unless force
+    is True.
+
     :param path: path to the file
+    :param force: if False and the dictionary is already loaded, do nothing.
+        If True, always load the dictionary.
     :return: a nested dictionary containing transformations.
         each level of the dictionary has one token of the right-hand side of
         the transformation rule mapping to a tuple (transformations, dict):
@@ -208,6 +217,15 @@ def load_ppdb(path):
                                     {})})
         }
     """
+    global _ppdb_dict
+    if _ppdb_dict is not None and not force:
+        return _ppdb_dict
+
+    if path.endswith('.pickle'):
+        with open(path, 'rb') as f:
+            _ppdb_dict = cPickle.load(f)
+        return _ppdb_dict
+
     transformations = TransformationDict()
     articles = {'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas'}
 
@@ -244,6 +262,8 @@ def load_ppdb(path):
 
             # add rhs to the transformation dictionary
             transformations.add(lhs, rhs)
+
+    _ppdb_dict = transformations
 
     return transformations
 
