@@ -30,29 +30,18 @@ class EmbeddingDictionary(object):
     Class for storing a word dictionary to embeddings. It treats special
     cases of OOV words.
     '''
-    def __init__(self, wd, embeddings, oov_vector=None):
+    def __init__(self, wd, embeddings):
         '''
         Create a new EmbeddingDictionary.
 
         :param wd: path to vocabulary
         :param embeddings: path to 2-d numpy array
-        :param oov_vector: vector to be used for OOV words
-            If None, one is created from a normal dist
         '''
         logging.info('Reading embeddings...')
 
-        base_embeddings = np.load(embeddings)
-        if oov_vector is None:
-            oov_vector = np.random.normal(base_embeddings.mean(),
-                                          base_embeddings.std(),
-                                          base_embeddings.shape[1])
-
-        # append the OOV vector to the embeddings and make any OOV
-        # word be indexed to it
-        last_index = base_embeddings.shape[0]
-        base_dictionary = read_vocabulary(wd)
-        self.wd = defaultdict(lambda: last_index, base_dictionary)
-        self.embeddings = np.vstack((base_embeddings, oov_vector))
+        # wd should include OOV treatment
+        self.wd = read_vocabulary(wd)
+        self.embeddings = np.load(embeddings)
 
     def __getitem__(self, item):
         return self.embeddings[self.wd[item]]
@@ -118,19 +107,22 @@ def load_stopwords():
     return set(nltk.corpus.stopwords.words('portuguese'))
 
 
-def find_ppdb_alignments(pair, transformations, max_length):
+def find_ppdb_alignments(pair, max_length):
     """
     Find lexical and phrasal alignments in the pair according to transformation
     rules from the paraphrase database.
 
     :param pair: Pair
-    :param transformations: TransformationDict
+    :param max_length: maximum length of the left-hand side (in number of
+        tokens)
     """
     tokens_t = pair.annotated_t.tokens
     tokens_h = pair.annotated_h.tokens
     token_texts_t = [token.text.lower() for token in tokens_t]
     token_texts_h = [token.text.lower() for token in tokens_h]
     alignments = []
+
+    ppdb.load_ppdb(config.ppdb_path)
 
     for i, token in enumerate(tokens_t):
         # check the maximum length that makes sense to search for
@@ -141,9 +133,12 @@ def find_ppdb_alignments(pair, transformations, max_length):
                 continue
 
             lhs = [token for token in token_texts_t[i:i + length]]
-            rhs_rules = transformations[lhs][0]
+            rhs_rules = ppdb.get_rhs(lhs)
             if not rhs_rules:
                 continue
+
+            # now get the token objects, instead of just their text
+            lhs = tokens_t[i:i + length]
 
             for rule in rhs_rules:
                 index = ppdb.search(token_texts_h, rule)
@@ -174,12 +169,12 @@ def filter_words_by_pos(tokens, tags=None):
 
 def find_lexical_alignments(pair):
     '''
-    Find the lexical alignments in the pair and write them to a variable
-    `lexical_alignments` in `pair`.
+    Find the lexical alignments in the pair.
     
     Lexical alignments are simply two equal or synonym words.
     
     :type pair: datastructures.Pair
+    :return: list with the (Token, Token) aligned tuples
     '''
     # pronouns aren't content words, but let's pretend they are
     content_word_tags = {'NOUN', 'VERB', 'PRON', 'ADJ', 'ADV', 'PNOUN'}
@@ -192,7 +187,7 @@ def find_lexical_alignments(pair):
                             pair.annotated_h.tokens, content_word_tags)
                        if token.lemma not in ['ser', 'ter']]
     
-    pair.lexical_alignments = []
+    lexical_alignments = []
     
     for token in pair.annotated_t.tokens:
         token.aligned_to = []
@@ -215,9 +210,11 @@ def find_lexical_alignments(pair):
                 aligned = True
 
             if aligned:
-                pair.lexical_alignments.append((token_t, token_h))
+                lexical_alignments.append((token_t, token_h))
                 token_t.aligned_to.append(token_h)
                 token_h.aligned_to.append(token_t)
+
+    return lexical_alignments
 
 
 def extract_classes(pairs):
@@ -315,7 +312,9 @@ def read_vocabulary(path):
 
     words = text.splitlines()
     values = range(len(words))
-    word_dict = dict(zip(words, values))
+    d = dict(zip(words, values))
+    unk_index = d['<unk>']
+    word_dict = defaultdict(lambda: unk_index, d)
 
     return word_dict
 
