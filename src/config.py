@@ -51,9 +51,9 @@ nlpnet_path_en = r'D:/desenvolvimento/nlpnet/data/dependency'
 
 stopwords_path = None
 
-# Open Wordnet PT in NT format
-# ownpt_path = 'data/own-pt.nt'
+# pickle is faster to read than wordnet in nt or ppdb in txt
 ownpt_path = 'data/own-pt.pickle'
+ppdb_path = 'data/ppdb-xxl-phrasal.pickle'
 
 lda_path = r'data/lda-100/lda.dat'
 tfidf_path = r'data/lda-100/tfidf.dat'
