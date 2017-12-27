@@ -181,6 +181,9 @@ def _is_trivial_paraphrase(exp1, exp2):
     if len(exp1) != len(exp2):
         return False
 
+    if exp1 == (',',) or exp2 == (',',):
+        return True
+
     for w1, w2 in zip(exp1, exp2):
         w1 = strip_suffix(w1)
         w2 = strip_suffix(w2)
@@ -232,12 +235,14 @@ def load_ppdb(path, force=False):
     def remove_comma_and_article(expression):
         if len(expression) == 1:
             return expression
-        if expression[0] == ',':
+
+        while expression[0] in articles or expression[0] == ',':
             expression = expression[1:]
+            if len(expression) == 0:
+                return expression
+
         if expression[-1] == ',':
             expression = expression[:-1]
-        if expression[0] in articles:
-            expression = expression[1:]
         return expression
 
     with open(path, 'rb') as f:
@@ -341,3 +346,12 @@ def suffix_length(needle, p):
         j -= 1
 
     return length
+
+
+def get_rhs(lhs):
+    """
+    Return the possible RHS of a given LHS.
+    :param lhs: token or list of tokens
+    :return: list of tuples
+    """
+    return _ppdb_dict.get_rhs(lhs)
