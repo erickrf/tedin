@@ -38,8 +38,8 @@ def preprocess_pairs(pairs):
             logging.error('Error reading parser output:', e)
             logging.error(tb)
 
-        utils.find_lexical_alignments(pair)
-
+        pair.lexical_alignments = utils.find_lexical_alignments(pair)
+        pair.ppdb_alignments = utils.find_ppdb_alignments(pair, max_length=5)
         pairs[i] = pair
 
 
@@ -54,4 +54,3 @@ if __name__ == '__main__':
     preprocess_pairs(pairs)
     with open(args.output, 'wb') as f:
         cPickle.dump(pairs, f)
-
