@@ -40,13 +40,13 @@ def index_3d(tensor, inds1, inds2):
     return tf.gather_nd(tensor, inds)
 
 
-class SimpleTreeEditLearner(Trainable):
+class TreeEditNetwork(Trainable):
     """
     Model that learns weights for different tree edit operations.
     """
 
     def __init__(self, vocabulary_size, embedding_size):
-        super(Trainable, self).__init__()
+        super(TreeEditNetwork, self).__init__()
 
         self.embedding_size = embedding_size
         self.vocab_size = vocabulary_size
@@ -65,16 +65,16 @@ class SimpleTreeEditLearner(Trainable):
                                    'leftmost-descendants2')
 
         # key roots
-        self.keyroots1 = tf.placeholder(tf.int32, [None, None], 'keyroots1')
-        self.keyroots2 = tf.placeholder(tf.int32, [None, None], 'keyroots2')
+        self.key_roots1 = tf.placeholder(tf.int32, [None, None], 'keyroots1')
+        self.key_roots2 = tf.placeholder(tf.int32, [None, None], 'keyroots2')
 
         # sentence sizes
         self.sizes1 = tf.placeholder(tf.int32, [None], 'sizes1')
         self.sizes2 = tf.placeholder(tf.int32, [None], 'sizes2')
 
         # number of actual key roots
-        self.num_keyroots1 = tf.placeholder(tf.int32, [None], 'num_keyroots1')
-        self.num_keyroots2 = tf.placeholder(tf.int32, [None], 'num_keyroots2')
+        self.num_keyroots1 = tf.placeholder(tf.int32, [None], 'num_key_roots1')
+        self.num_keyroots2 = tf.placeholder(tf.int32, [None], 'num_key_roots2')
 
         # target task label
         self.label = tf.placeholder(tf.int32, [None], 'label')
@@ -82,7 +82,11 @@ class SimpleTreeEditLearner(Trainable):
         # training params
         self.learning_rate = tf.placeholder(tf.float32, None, 'learning_rate')
 
-        # self.tree_distance = self.compute_distance()
+        self.tree_distance = self.compute_distance()
+        self.init_op = self._init_internal_variables()
+
+    def _init_internal_variables(self):
+        return tf.variables_initializer([self.distances, self.fd])
 
     def _create_batch_feed(self, batch, **kwargs):
         """
@@ -95,8 +99,8 @@ class SimpleTreeEditLearner(Trainable):
         feeds = {self.sizes1: batch.sizes1, self.sizes2: batch.sizes2,
                  self.nodes1: batch.nodes1, self.nodes2: batch.nodes2,
                  self.lmd1: batch.lmd1, self.lmd2: batch.lmd2,
-                 self.keyroots1: batch.key_roots1,
-                 self.keyroots2: batch.key_roots2,
+                 self.key_roots1: batch.key_roots1,
+                 self.key_roots2: batch.key_roots2,
                  self.num_keyroots1: batch.num_key_roots1,
                  self.num_keyroots2: batch.num_key_roots2}
 
@@ -109,7 +113,7 @@ class SimpleTreeEditLearner(Trainable):
         return 1
 
     def update_cost(self, node1, node2):
-        return 2
+        return 1 - tf.cast(tf.equal(node1, node2), tf.float32)
 
     def compute_distance(self):
         """
@@ -120,17 +124,19 @@ class SimpleTreeEditLearner(Trainable):
         batch_size = tf.shape(self.sizes1)[0]
         max_size1 = tf.reduce_max(self.sizes1)
         max_size2 = tf.reduce_max(self.sizes2)
-        with tf.control_dependencies(None):
-            # hack to create variable in a function called by a loop
-            distances = tf.Variable(
-                tf.zeros([batch_size, max_size1, max_size2]), trainable=False,
-                validate_shape=False)
+        distances = tf.Variable(
+            tf.zeros([batch_size, max_size1, max_size2]), trainable=False,
+            validate_shape=False, name='distances')
 
         # fd stores partial distances between subtrees; it is overwritten inside
         # loops
         fd_values = tf.zeros((batch_size, max_size1 + 1, max_size2 + 1),
                              tf.float32)
-        fd = tf.Variable(fd_values, trainable=False, validate_shape=False)
+        fd = tf.Variable(fd_values, trainable=False, validate_shape=False,
+                         name='partial_distances')
+
+        self.fd = fd
+        self.distances = distances
 
         def outer_keyroot_loop(i):
             # loops along keyroots of sentence 1
@@ -147,8 +153,8 @@ class SimpleTreeEditLearner(Trainable):
             Loop along keyroots of sentence 2
             computes the tree distance
             """
-            i = self.keyroots1[:, i_idx]
-            j = self.keyroots2[:, j_idx]
+            i = self.key_roots1[:, i_idx]
+            j = self.key_roots2[:, j_idx]
 
             # m and n have shape (batch_size,)
             lmd1_i = index_columns(self.lmd1, i)
@@ -210,17 +216,23 @@ class SimpleTreeEditLearner(Trainable):
 
             def inner_loop(x, y):
                 lmd1_i = index_columns(self.lmd1, i)
-                lmd1_x_ioff = index_columns(self.lmd1, x + ioff)
+
+                # x is iterating from 1 to max_m -- which may be higher than
+                # the tensor bounds for some items in the batch
+                # clip it to the last valid one
+                clipped_x = tf.where(x > m, m, x * tf.ones_like(m))
+                clipped_y = tf.where(y > n, n, y * tf.ones_like(n))
+                lmd1_x_ioff = index_columns(self.lmd1, clipped_x + ioff)
                 condition1 = tf.equal(lmd1_i, lmd1_x_ioff)
 
                 lmd2_j = index_columns(self.lmd2, j)
-                lmd2_y_joff = index_columns(self.lmd2, y + joff)
+                lmd2_y_joff = index_columns(self.lmd2, clipped_y + joff)
                 condition2 = tf.equal(lmd2_j, lmd2_y_joff)
 
                 condition = tf.logical_and(condition1, condition2)
 
-                nodes1 = index_columns(self.nodes1, x + ioff)
-                nodes2 = index_columns(self.nodes2, y + joff)
+                nodes1 = index_columns(self.nodes1, clipped_x + ioff)
+                nodes2 = index_columns(self.nodes2, clipped_y + joff)
                 cost_insert = fd[:, x - 1, y] + self.remove_cost(nodes1)
                 cost_remove = fd[:, x, y - 1] + self.insert_cost(nodes2)
 
@@ -229,7 +241,15 @@ class SimpleTreeEditLearner(Trainable):
 
                 p = lmd1_x_ioff - 1 - ioff
                 q = lmd2_y_joff - 1 - joff
-                old_distance = index_3d(distances, x + ioff, y + joff)
+
+                # avoid the indices x + ioff and y + joff going after the
+                # tensor bounds. this happens only when "condition" is false and
+                # they aren't needed; we clip them for computational reasons
+                # inds1 = tf.where(condition, tf.zeros_like(ioff), x + ioff)
+                # inds2 = tf.where(condition, tf.zeros_like(joff), y + joff)
+                # old_distance = index_3d(distances, inds1, inds2)
+                old_distance = index_3d(distances, clipped_x + ioff,
+                                        clipped_y + joff)
 
                 # tf.gather_nd doesn't accept negative indices, so we just
                 # replace any of them with 0. This has no influence in the
@@ -245,6 +265,7 @@ class SimpleTreeEditLearner(Trainable):
 
                 min_cost = tf.reduce_min([cost_insert, cost_remove,
                                           cost_update], axis=0)
+
                 assign = tf.assign(fd[:, x, y], min_cost)
                 with tf.control_dependencies([assign]):
                     # in practice, we want to do something like
@@ -254,7 +275,8 @@ class SimpleTreeEditLearner(Trainable):
                     new_distance_values = tf.where(condition, min_cost,
                                                    old_distance)
 
-                inds = tf.stack([tf.range(batch_size), x + ioff, y + joff],
+                inds = tf.stack([tf.range(batch_size), clipped_x + ioff,
+                                 clipped_y + joff],
                                 axis=1)
                 assign = tf.scatter_nd_update(distances, inds,
                                               new_distance_values)
@@ -280,8 +302,8 @@ class SimpleTreeEditLearner(Trainable):
             # create a 2d tensor where each row (i, j, k) has indicates the last
             # position in the i-th pair (last position j of sentence 1 and k of
             # sentence 2)
-            inds = tf.stack([tf.range(batch_size), self.sizes1, self.sizes2],
-                            axis=1)
+            inds = tf.stack([tf.range(batch_size), self.sizes1 - 1,
+                             self.sizes2 - 1], axis=1)
             last_distance = tf.gather_nd(distances, inds)
 
         return last_distance
