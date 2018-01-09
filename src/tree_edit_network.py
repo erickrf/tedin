@@ -169,13 +169,6 @@ class TreeEditNetwork(Trainable):
             # reset the fd values
             assign = tf.assign(fd, tf.zeros_like(fd, tf.float32))
 
-            # # fd stores partial distances between subtrees
-            # with tf.control_dependencies(None):
-            #     # hack to create variable in a function called by a loop
-            #     fd = tf.Variable(tf.zeros((batch_size, max_m, max_n),
-            #                               tf.float32),
-            #                      trainable=False, validate_shape=False)
-
             with tf.control_dependencies([assign]):
                 ioff = lmd1_i - 1
                 joff = lmd2_j - 1
@@ -183,6 +176,7 @@ class TreeEditNetwork(Trainable):
             # I heard you like nested functions so I put a nested function
             # inside your nested function
             def inner_loop_remove(x):
+                # this loop sets the costs of removing nodes from sentence 1
                 node = index_columns(self.nodes1, x + ioff)
                 assign = tf.assign(fd[:, x, 0],
                                    fd[:, x - 1, 0] + self.remove_cost(node))
@@ -192,6 +186,7 @@ class TreeEditNetwork(Trainable):
                 return x
 
             def inner_loop_insert(y):
+                # this loop sets the costs of adding nodes from sentence 2
                 node = index_columns(self.nodes2, y + joff)
                 assign = tf.assign(fd[:, 0, y],
                                    fd[:, 0, y - 1] + self.insert_cost(node))
@@ -245,9 +240,6 @@ class TreeEditNetwork(Trainable):
                 # avoid the indices x + ioff and y + joff going after the
                 # tensor bounds. this happens only when "condition" is false and
                 # they aren't needed; we clip them for computational reasons
-                # inds1 = tf.where(condition, tf.zeros_like(ioff), x + ioff)
-                # inds2 = tf.where(condition, tf.zeros_like(joff), y + joff)
-                # old_distance = index_3d(distances, inds1, inds2)
                 old_distance = index_3d(distances, clipped_x + ioff,
                                         clipped_y + joff)
 
