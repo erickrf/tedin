@@ -308,7 +308,7 @@ def read_vocabulary(path):
         embedding matrix
     """
     with open(path, 'rb') as f:
-        text = unicode(f.read(), 'utf-8')
+        text = f.read().decode('utf-8', errors='ignore')
 
     words = text.splitlines()
     values = range(len(words))

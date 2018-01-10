@@ -25,12 +25,41 @@ def index_columns(tensor, indices):
     return tf.gather_nd(tensor, indices_2d)
 
 
-def index_3d(tensor, inds1, inds2):
+def row_wise_gather(tensor, indices, clip_inds=True):
     """
-    Return the elements of a tensor [i, inds1[i], inds2[i]], with i = number of
-    items / rows.
+    Apply the equivalent of tf.gather(tensor[i], indices[i]) for every row i
+    in `tensor` and `indices`.
 
     :param tensor: 2d tensor
+    :param indices: 2d tensor
+    :param clip_inds: if True, any value in indices past the end of dim 1 of
+        tensor are clipped to the maximum allowed.
+    :return: 2d tensor
+    """
+    if clip_inds:
+        max_dim2 = tf.shape(tensor)[1]
+        clip_value = (max_dim2 - 1) * tf.ones_like(indices)
+        indices = tf.where(indices > clip_value, clip_value, indices)
+
+    # tensor = tf.Print(tensor, [tf.shape(tensor),
+    #                            tf.shape(indices), indices],
+    #                   'tensor, indices', summarize=30)
+    gathered3d = tf.gather(tensor, indices, axis=1)
+
+    # we must take the vectors at position [0, 0], [1, 1], [2, 2] and so on
+    batch_size = tf.shape(gathered3d)[0]
+    range_ = tf.range(batch_size)
+    inds = tf.tile(tf.reshape(range_, [-1, 1]), [1, 2])
+
+    return tf.gather_nd(gathered3d, inds)
+
+
+def index_3d(tensor, inds1, inds2):
+    """
+    Return the elements of a tensor [i, inds1[i], inds2[i]], with
+    0 <= i <= num_rows
+
+    :param tensor: 3d tensor
     :param inds1: 1d tensor
     :param inds2: 1d tensor
     :return: 1d tensor
@@ -82,8 +111,15 @@ class TreeEditNetwork(Trainable):
         # training params
         self.learning_rate = tf.placeholder(tf.float32, None, 'learning_rate')
 
+        # remove_costs stores the costs for removing each node1
+        # insert_costs stores the costs for inserting each node2
+        # both shapes are (batch, num_units)
+        self.remove_costs = self.compute_remove_cost(self.nodes1)
+        self.insert_costs = self.compute_insert_cost(self.nodes2)
+
         self.tree_distance = self.compute_distance()
         self.init_op = self._init_internal_variables()
+
 
     def _init_internal_variables(self):
         return tf.variables_initializer([self.distances, self.fd])
@@ -106,13 +142,31 @@ class TreeEditNetwork(Trainable):
 
         return feeds
 
-    def remove_cost(self, node):
-        return 1
+    def compute_remove_cost(self, nodes):
+        """
+        :param nodes: tensor (batch, num_nodes)
+        :param nodes: tensor (batch,)
+        :return: tensor (batch, num_nodes)
+        """
+        costs = tf.ones_like(nodes, tf.float32)
+        # ranges = tf.range(tf.reduce_max(sizes))
+        # tf.tile(tf.reshape(ranges, [-1, 1]),
 
-    def insert_cost(self, node):
-        return 1
+        return costs
 
-    def update_cost(self, node1, node2):
+    def compute_insert_cost(self, nodes):
+        """
+        :param nodes: tensor (batch, num_nodes)
+        :return: tensor (batch, num_nodes)
+        """
+        return tf.ones_like(nodes, tf.float32)
+
+    def compute_update_cost(self, node1, node2):
+        """
+        :param node1: tensor (batch, num_units)
+        :param node2: tensor (batch, num_units)
+        :return: tensor (batch)
+        """
         return 1 - tf.cast(tf.equal(node1, node2), tf.float32)
 
     def compute_distance(self):
@@ -170,38 +224,28 @@ class TreeEditNetwork(Trainable):
             assign = tf.assign(fd, tf.zeros_like(fd, tf.float32))
 
             with tf.control_dependencies([assign]):
+                # ioff and joff have shape (batch_size,)
                 ioff = lmd1_i - 1
                 joff = lmd2_j - 1
 
+            # here we set the all-remove and all-insert operations
+            ranges = tf.tile(tf.reshape(tf.range(1, max_m), [1, -1]),
+                             [batch_size, 1])
+            inds = ranges + tf.reshape(ioff, [-1, 1])
+            remove_costs = row_wise_gather(self.remove_costs, inds)
+            cumulative_costs = tf.cumsum(remove_costs, axis=1)
+            assign_remove = tf.assign(fd[:, 1:max_m, 0], cumulative_costs)
+
+            ranges = tf.tile(tf.reshape(tf.range(1, max_n), [1, -1]),
+                             [batch_size, 1])
+            inds = ranges + tf.reshape(joff, [-1, 1])
+
+            insert_costs = row_wise_gather(self.insert_costs, inds)
+            cumulative_costs = tf.cumsum(insert_costs, axis=1)
+            assign_insert = tf.assign(fd[:, 0, 1:max_n], cumulative_costs)
+
             # I heard you like nested functions so I put a nested function
             # inside your nested function
-            def inner_loop_remove(x):
-                # this loop sets the costs of removing nodes from sentence 1
-                node = index_columns(self.nodes1, x + ioff)
-                assign = tf.assign(fd[:, x, 0],
-                                   fd[:, x - 1, 0] + self.remove_cost(node))
-                with tf.control_dependencies([assign]):
-                    x += 1
-
-                return x
-
-            def inner_loop_insert(y):
-                # this loop sets the costs of adding nodes from sentence 2
-                node = index_columns(self.nodes2, y + joff)
-                assign = tf.assign(fd[:, 0, y],
-                                   fd[:, 0, y - 1] + self.insert_cost(node))
-                with tf.control_dependencies([assign]):
-                    y += 1
-
-                return y
-
-            # these two loops set the all-remove and all-insert solution
-            x = tf.constant(1)
-            loop1 = tf.while_loop(lambda x: x < max_m, inner_loop_remove, [x],
-                                  parallel_iterations=1)
-            loop2 = tf.while_loop(lambda x: x < max_n, inner_loop_insert, [x],
-                                  parallel_iterations=1)
-
             def outer_loop(x):
                 loop = tf.while_loop(lambda x, y: y < max_n, inner_loop, [x, 1])
                 with tf.control_dependencies(loop):
@@ -228,11 +272,16 @@ class TreeEditNetwork(Trainable):
 
                 nodes1 = index_columns(self.nodes1, clipped_x + ioff)
                 nodes2 = index_columns(self.nodes2, clipped_y + joff)
-                cost_insert = fd[:, x - 1, y] + self.remove_cost(nodes1)
-                cost_remove = fd[:, x, y - 1] + self.insert_cost(nodes2)
+                # cost_insert = fd[:, x - 1, y] + self.remove_cost(nodes1)
+                # cost_remove = fd[:, x, y - 1] + self.insert_cost(nodes2)
+
+                cost1 = index_columns(self.remove_costs, clipped_x + ioff)
+                cost2 = index_columns(self.insert_costs, clipped_y + joff)
+                cost_insert = fd[:, x - 1, y] + cost1
+                cost_remove = fd[:, x, y - 1] + cost2
 
                 cost_update_positive = fd[:, x - 1, y - 1] + \
-                    self.update_cost(nodes1, nodes2)
+                    self.compute_update_cost(nodes1, nodes2)
 
                 p = lmd1_x_ioff - 1 - ioff
                 q = lmd2_y_joff - 1 - joff
@@ -278,7 +327,7 @@ class TreeEditNetwork(Trainable):
                 return x, y
 
             # this is the main nested loop for the rest of the comparisons
-            with tf.control_dependencies([loop1, loop2]):
+            with tf.control_dependencies([assign_remove, assign_insert]):
                 loop3 = tf.while_loop(lambda x: x < max_m, outer_loop, [1])
 
             with tf.control_dependencies([loop3]):
