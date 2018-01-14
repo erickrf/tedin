@@ -12,6 +12,13 @@ from trainable import Trainable
 from datastructures import Dataset
 
 
+# operation codes
+INSERT = 1
+REMOVE = 2
+UPDATE = 3
+MATCH = 4
+
+
 def index_columns(tensor, indices):
     """
     Return the elements of a tensor such that its n-th row is indexed by the
@@ -120,9 +127,11 @@ class TreeEditNetwork(Trainable):
         self.tree_distance = self.compute_distance()
         self.init_op = self._init_internal_variables()
 
-
     def _init_internal_variables(self):
-        return tf.variables_initializer([self.distances, self.fd])
+        return tf.variables_initializer([self.distances, self.fd,
+                                         self.tree_ops, self.fd_ops,
+                                         self.backpointer_col,
+                                         self.backpointer_row])
 
     def _create_batch_feed(self, batch, **kwargs):
         """
@@ -169,6 +178,44 @@ class TreeEditNetwork(Trainable):
         """
         return 1 - tf.cast(tf.equal(node1, node2), tf.float32)
 
+    def _assign_inital_insert_operations(self, ops):
+        """
+        Create an operator to assign values to a variable such that the i-th
+        column has a sequence of i INSERT operations.
+
+        :param ops: tensor to hold the op codes, shape (batch, num_nodes1,
+            num_nodes2, num_nodes1 + num_nodes2)
+        :return: an assign operator
+        """
+        r = tf.range(tf.shape(ops)[-1])
+        tiled_r = tf.tile(tf.reshape(r, [1, -1]), [tf.shape(ops)[2], 1])
+        num_ops = tf.reshape(tf.range(tf.shape(ops)[2]), [-1, 1])
+        new_ops = INSERT * tf.cast(tf.less(tiled_r, num_ops), tf.int32)
+        new_ops3d = tf.reshape(new_ops, [1, tf.shape(ops)[2],
+                                         tf.shape(ops)[-1]])
+        tiled_new_ops = tf.tile(new_ops3d, [tf.shape(ops)[0], 1, 1])
+
+        return tf.assign(ops[:, 0, :, :], tiled_new_ops)
+
+    def _assign_inital_remove_operations(self, ops):
+        """
+        Create an operator to assign values to a variable such that the i-th
+        row has a sequence of i REMOVE operations.
+
+        :param ops: tensor to hold the op codes, shape (batch, num_nodes1,
+            num_nodes2, num_nodes1 + num_nodes2)
+        :return: an assign operator
+        """
+        r = tf.range(tf.shape(ops)[-1])
+        tiled_r = tf.tile(tf.reshape(r, [1, -1]), [tf.shape(ops)[1], 1])
+        num_ops = tf.reshape(tf.range(tf.shape(ops)[1]), [-1, 1])
+        new_ops = REMOVE * tf.cast(tf.less(tiled_r, num_ops), tf.int32)
+        new_ops3d = tf.reshape(new_ops, [1, tf.shape(ops)[1],
+                                         tf.shape(ops)[-1]])
+        tiled_new_ops = tf.tile(new_ops3d, [tf.shape(ops)[0], 1, 1])
+
+        return tf.assign(ops[:, :, 0, :], tiled_new_ops)
+
     def compute_distance(self):
         """
         Compute the distance between the two given sentences in placeholders
@@ -178,6 +225,8 @@ class TreeEditNetwork(Trainable):
         batch_size = tf.shape(self.sizes1)[0]
         max_size1 = tf.reduce_max(self.sizes1)
         max_size2 = tf.reduce_max(self.sizes2)
+
+        # these are the distances between each pair of trees
         distances = tf.Variable(
             tf.zeros([batch_size, max_size1, max_size2]), trainable=False,
             validate_shape=False, name='distances')
@@ -187,10 +236,40 @@ class TreeEditNetwork(Trainable):
         fd_values = tf.zeros((batch_size, max_size1 + 1, max_size2 + 1),
                              tf.float32)
         fd = tf.Variable(fd_values, trainable=False, validate_shape=False,
-                         name='partial_distances')
+                         name='forest_distances')
 
         self.fd = fd
         self.distances = distances
+
+        # this stores the operations used in each subtree cell
+        # each cell holds the operation value; the nodes involved are determined
+        # by its coordinates
+        # partial_ops = tf.Variable(tf.zeros_like(fd_values, tf.int32),
+        #                           trainable=False, validate_shape=False,
+        #                           name='partial_operations')
+        shape = [batch_size, max_size1 + 1, max_size2 + 1,
+                 max_size1 + max_size2]
+        fd_ops = tf.Variable(tf.zeros(shape, tf.int32), trainable=False,
+                             validate_shape=False, name='fd_operations')
+
+        # this stores the list of operations in each tree distance cell
+        shape = [batch_size, max_size1, max_size2, max_size1 + max_size2]
+        tree_ops = tf.Variable(tf.zeros(shape, tf.int32), trainable=False,
+                                 validate_shape=False, name='operations')
+        # self.partial_ops = partial_ops
+        self.fd_ops = fd_ops
+        self.tree_ops = tree_ops
+
+        # [backpointer_row[i, j], backpointer_col[i, j]]  points to the last
+        # operation performed before operations[i, j]
+        bp_row = tf.Variable(
+            tf.zeros_like(fd_values, tf.int32), trainable=False,
+            validate_shape=False, name='backpointer_row')
+        bp_col = tf.Variable(
+            tf.zeros_like(fd_values, tf.int32), trainable=False,
+            validate_shape=False, name='backpointer_col')
+        self.backpointer_row = bp_row
+        self.backpointer_col = bp_col
 
         def outer_keyroot_loop(i):
             # loops along keyroots of sentence 1
@@ -220,10 +299,12 @@ class TreeEditNetwork(Trainable):
             max_m = tf.reduce_max(m)
             max_n = tf.reduce_max(n)
 
-            # reset the fd values
-            assign = tf.assign(fd, tf.zeros_like(fd, tf.float32))
+            # reset the fd and partial_ops values
+            assign_fd = tf.assign(fd, tf.zeros_like(fd, tf.float32))
+            assign_ops = tf.assign(fd_ops, tf.zeros_like(fd_ops))
+            # assign_ops = tf.assign(partial_ops, tf.zeros_like(partial_ops))
 
-            with tf.control_dependencies([assign]):
+            with tf.control_dependencies([assign_fd, assign_ops]):
                 # ioff and joff have shape (batch_size,)
                 ioff = lmd1_i - 1
                 joff = lmd2_j - 1
@@ -235,6 +316,10 @@ class TreeEditNetwork(Trainable):
             remove_costs = row_wise_gather(self.remove_costs, inds)
             cumulative_costs = tf.cumsum(remove_costs, axis=1)
             assign_remove = tf.assign(fd[:, 1:max_m, 0], cumulative_costs)
+            # remove_op = REMOVE * tf.ones_like(partial_ops[:, 1:max_m, 0])
+            # assign_remove_ops = tf.assign(partial_ops[:, 1:max_m, 0], remove_op)
+            assign_remove_ops = self._assign_inital_remove_operations(fd_ops)
+            # assign_row = tf.assign(bp_row[:, :, 0], tf.range(max_m))
 
             ranges = tf.tile(tf.reshape(tf.range(1, max_n), [1, -1]),
                              [batch_size, 1])
@@ -242,7 +327,11 @@ class TreeEditNetwork(Trainable):
 
             insert_costs = row_wise_gather(self.insert_costs, inds)
             cumulative_costs = tf.cumsum(insert_costs, axis=1)
+            # insert_op = INSERT * tf.ones_like(partial_ops[:, 0, 1:max_n])
             assign_insert = tf.assign(fd[:, 0, 1:max_n], cumulative_costs)
+            # assign_insert_ops = tf.assign(partial_ops[:, 0, 1:max_n], insert_op)
+            assign_insert_ops = self._assign_inital_insert_operations(fd_ops)
+            # assign_col = tf.assign(bp_col[:, 0, :], tf.range(max_n))
 
             # I heard you like nested functions so I put a nested function
             # inside your nested function
@@ -272,13 +361,11 @@ class TreeEditNetwork(Trainable):
 
                 nodes1 = index_columns(self.nodes1, clipped_x + ioff)
                 nodes2 = index_columns(self.nodes2, clipped_y + joff)
-                # cost_insert = fd[:, x - 1, y] + self.remove_cost(nodes1)
-                # cost_remove = fd[:, x, y - 1] + self.insert_cost(nodes2)
 
                 cost1 = index_columns(self.remove_costs, clipped_x + ioff)
                 cost2 = index_columns(self.insert_costs, clipped_y + joff)
-                cost_insert = fd[:, x - 1, y] + cost1
-                cost_remove = fd[:, x, y - 1] + cost2
+                cost_remove = fd[:, x - 1, y] + cost1
+                cost_insert = fd[:, x, y - 1] + cost2
 
                 cost_update_positive = fd[:, x - 1, y - 1] + \
                     self.compute_update_cost(nodes1, nodes2)
@@ -291,6 +378,8 @@ class TreeEditNetwork(Trainable):
                 # they aren't needed; we clip them for computational reasons
                 old_distance = index_3d(distances, clipped_x + ioff,
                                         clipped_y + joff)
+                old_operations = index_3d(tree_ops, clipped_x + ioff,
+                                          clipped_y + joff)
 
                 # tf.gather_nd doesn't accept negative indices, so we just
                 # replace any of them with 0. This has no influence in the
@@ -304,30 +393,74 @@ class TreeEditNetwork(Trainable):
                 cost_update = tf.where(condition, cost_update_positive,
                                        cost_update_negative)
 
-                min_cost = tf.reduce_min([cost_insert, cost_remove,
-                                          cost_update], axis=0)
+                costs = [cost_insert, cost_remove, cost_update]
+                min_cost = tf.reduce_min(costs, axis=0)
 
-                assign = tf.assign(fd[:, x, y], min_cost)
-                with tf.control_dependencies([assign]):
+                # codes are insert = 1 , remove = 2, update = 3
+                # 0 should only appear as padding
+                operation = tf.cast(tf.argmin(costs, axis=0) + 1, tf.int32)
+
+                assign_fd = tf.assign(fd[:, x, y], min_cost)
+                # assign_ops = tf.assign(partial_ops[:, x, y], operation)
+
+                # each of the history tensors has the history of operations
+                # used up to the previous step
+                history_insert = fd_ops[:, x, y - 1, :]
+                history_remove = fd_ops[:, x - 1, y, :]
+                history_update = tf.where(condition, fd_ops[:, x - 1, y - 1, :],
+                                          index_3d(fd_ops, p, q))
+
+                # op_hist is the history of operations before the one used in
+                # this time step
+                # operation has shape (batch,); tf.where broadcasts it
+                op_hist = tf.where(
+                    tf.equal(operation, INSERT), history_insert,
+                    tf.where(tf.equal(operation, REMOVE), history_remove,
+                             history_update))
+
+                # assign the new operation in the first position
+                assign_ops = tf.assign(fd_ops[:, x, y, 0], operation)
+                assign_op_hist = tf.assign(fd_ops[:, x, y, 1:], op_hist[:, :-1])
+
+                # when you go down a row, you remove a node
+                # when you go right a column, you add a node
+                ones = tf.ones([batch_size], tf.int32)
+                rows = tf.where(tf.equal(min_cost, INSERT),
+                                x * ones, (x - 1) * ones)
+                cols = tf.where(tf.equal(min_cost, REMOVE),
+                                y * ones, (y - 1) * ones)
+                assign_rows = tf.assign(bp_row[:, x, y], rows)
+                assign_cols = tf.assign(bp_col[:, x, y], cols)
+                deps = [assign_fd, assign_ops, assign_rows, assign_cols,
+                        assign_op_hist]
+                with tf.control_dependencies(deps):
                     # in practice, we want to do something like
                     # if condition:
                     #     distances[:, x + ioff, y + joff] = new_distance
                     # condition is (batch_size,)
                     new_distance_values = tf.where(condition, min_cost,
                                                    old_distance)
+                    new_operation_values = tf.where(condition, fd_ops[:, x, y],
+                                                    old_operations)
 
                 inds = tf.stack([tf.range(batch_size), clipped_x + ioff,
                                  clipped_y + joff],
                                 axis=1)
-                assign = tf.scatter_nd_update(distances, inds,
-                                              new_distance_values)
-                with tf.control_dependencies([assign]):
+                assign_dists = tf.scatter_nd_update(distances, inds,
+                                                    new_distance_values)
+                assign_ops = tf.scatter_nd_update(tree_ops, inds,
+                                                  new_operation_values)
+                with tf.control_dependencies([assign_dists, assign_ops]):
                     y += 1
 
                 return x, y
 
             # this is the main nested loop for the rest of the comparisons
-            with tf.control_dependencies([assign_remove, assign_insert]):
+            dependencies = [assign_remove, assign_insert,
+                            assign_remove_ops, assign_insert_ops,
+                            # assign_row, assign_col
+                            ]
+            with tf.control_dependencies(dependencies):
                 loop3 = tf.while_loop(lambda x: x < max_m, outer_loop, [1])
 
             with tf.control_dependencies([loop3]):
