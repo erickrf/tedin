@@ -8,8 +8,8 @@ The treee edit distance code was adapted from the Python module zss.
 
 import tensorflow as tf
 
-from trainable import Trainable
-from datastructures import Dataset
+from src.trainable import Trainable
+from src.datastructures import Dataset
 
 
 # operation codes
@@ -30,6 +30,18 @@ def index_columns(tensor, indices):
     batch_size = tf.shape(indices)[0]
     indices_2d = tf.stack([tf.range(batch_size), indices], axis=1)
     return tf.gather_nd(tensor, indices_2d)
+
+
+def append_operations(operations1, operations2):
+    """
+    Append all the operations2 to operations1
+
+    0 indicates padding
+
+    :param operations1: a 2d tensor (batch, max_num_ops)
+    :param operations2: a 2d tensor (batch, max_num_ops)
+    :return:
+    """
 
 
 def row_wise_gather(tensor, indices, clip_inds=True):
@@ -76,13 +88,13 @@ def index_3d(tensor, inds1, inds2):
     return tf.gather_nd(tensor, inds)
 
 
-class TreeEditNetwork(Trainable):
+class TreeEditDistanceNetwork(Trainable):
     """
     Model that learns weights for different tree edit operations.
     """
 
     def __init__(self, vocabulary_size, embedding_size):
-        super(TreeEditNetwork, self).__init__()
+        super(TreeEditDistanceNetwork, self).__init__()
 
         self.embedding_size = embedding_size
         self.vocab_size = vocabulary_size
@@ -404,7 +416,7 @@ class TreeEditNetwork(Trainable):
                 # assign_ops = tf.assign(partial_ops[:, x, y], operation)
 
                 # each of the history tensors has the history of operations
-                # used up to the previous step
+                # used up to the previous step. Shape is (batch, max_ops)
                 history_insert = fd_ops[:, x, y - 1, :]
                 history_remove = fd_ops[:, x - 1, y, :]
                 history_update = tf.where(condition, fd_ops[:, x - 1, y - 1, :],
