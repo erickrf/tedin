@@ -31,8 +31,8 @@ class Dataset(object):
     Class for storing data in the format used by TED models.
     """
 
-    def __init__(self, nodes1, nodes2, sizes1, sizes2, key_roots1,
-                 key_roots2, num_key_roots1, num_key_roots2, lmd1, lmd2):
+    def __init__(self, nodes1, nodes2, sizes1, sizes2, key_roots1, key_roots2,
+                 num_key_roots1, num_key_roots2, lmd1, lmd2, labels):
         self.nodes1 = nodes1
         self.nodes2 = nodes2
         self.sizes1 = sizes1
@@ -43,13 +43,15 @@ class Dataset(object):
         self.num_key_roots2 = num_key_roots2
         self.lmd1 = lmd1
         self.lmd2 = lmd2
+        self.labels = labels
         self.num_items = len(nodes1)
 
         # variables in the order they are given in the constructor
         self._ordered_variables = [self.nodes1, self.nodes2, self.sizes1,
                                    self.sizes2, self.key_roots1,
                                    self.key_roots2, self.num_key_roots1,
-                                   self.num_key_roots2, self.lmd1, self.lmd2]
+                                   self.num_key_roots2, self.lmd1, self.lmd2,
+                                   self.labels]
 
     def __len__(self):
         return self.num_items
