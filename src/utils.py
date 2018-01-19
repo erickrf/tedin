@@ -15,6 +15,7 @@ from collections import defaultdict
 from xml.dom import minidom
 import numpy as np
 import nltk
+import os
 
 import config
 import datastructures as ds
@@ -409,3 +410,93 @@ def train_regressor(x, y):
     
     return regressor
 
+
+def load_text_embeddings(path):
+    """
+    Load any embedding model written as text, in the format:
+    word[space or tab][values separated by space or tab]
+
+    :param path: path to embeddings file
+    :return: a tuple (wordlist, array)
+    """
+    words = []
+
+    # start from index 1 and reserve 0 for unknown
+    vectors = []
+    with open(path, 'rb') as f:
+        for line in f:
+            line = line.decode('utf-8')
+            line = line.strip()
+            if line == '':
+                continue
+
+            fields = line.split(' ')
+            word = fields[0]
+            words.append(word)
+            vector = np.array([float(x) for x in fields[1:]], dtype=np.float32)
+            vectors.append(vector)
+
+    embeddings = np.array(vectors, dtype=np.float32)
+
+    return words, embeddings
+
+
+def load_binary_embeddings(embeddings_path, vocabulary_path):
+    """
+    Load any embedding model in numpy format, and a corresponding
+    vocabulary with one word per line.
+
+    :param embeddings_path: path to embeddings file
+    :param vocabulary_path: path to text file with words
+    :return: a tuple (wordlist, array)
+    """
+    vectors = np.load(embeddings_path)
+
+    with open(vocabulary_path, 'rb') as f:
+        text = f.read().decode('utf-8', errors='ignore')
+    words = text.splitlines()
+
+    return words, vectors
+
+
+def normalize_embeddings(embeddings):
+    """
+    Normalize the embeddings to have norm 1.
+    :param embeddings: 2-d numpy array
+    :return: normalized embeddings
+    """
+    # normalize embeddings
+    norms = np.linalg.norm(embeddings, axis=1).reshape((-1, 1))
+    return embeddings / norms
+
+
+def load_embeddings(embeddings_path, normalize=True):
+    """
+    Load and return an embedding model in either text format or
+    numpy binary format. If the file extension is .txt, text format is
+    assumed. If it is .npy, a corresponding vocabulary file is sought with
+    the same name and .txt.
+
+    :param embeddings_path: path to embeddings file
+    :param normalize: whether to normalize embeddings
+    :return: a tuple (defaultdict, array)
+    """
+
+    logging.debug('Loading embeddings')
+    base_path, ext = os.path.splitext(embeddings_path)
+    if ext.lower() == '.txt':
+        wordlist, embeddings = load_text_embeddings(embeddings_path)
+    else:
+        vocabulary_path = base_path + '.txt'
+        wordlist, embeddings = load_binary_embeddings(embeddings_path,
+                                                      vocabulary_path)
+
+    wd = {word: ind for ind, word in enumerate(wordlist)}
+    unk_index = wd['<unk>']
+    wd = defaultdict(lambda: unk_index, wd)
+
+    logging.debug('Embeddings have shape {}'.format(embeddings.shape))
+    if normalize:
+        embeddings = normalize_embeddings(embeddings)
+
+    return wd, embeddings
