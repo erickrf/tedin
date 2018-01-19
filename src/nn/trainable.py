@@ -26,12 +26,11 @@ class Trainable(object):
     """
     abc.__metaclass__ = abc.ABCMeta
 
-    def __init__(self):
+    def __init__(self, has_accuracy):
         self.loss = None
         self.accuracy = None
         self.train_op = None
-        self.session = None
-        self.has_accuracy = True
+        self.has_accuracy = has_accuracy
 
         self.accumulated_loss = 0
         self.best_loss = 10e10
