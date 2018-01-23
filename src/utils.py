@@ -101,6 +101,25 @@ def tokenize_sentence(text, change_quotes=True, change_digits=False):
     return tokenizer.tokenize(text)
 
 
+def nested_list_to_array(sequences, dtype=np.int32):
+    """
+    Create a numpy 2d array with the content of sequences.
+
+    In case of sublists with different sizes, the array is padded with zeros.
+
+    :param sequences: a list of sublists
+    :param dtype: type of the numpy array
+    :return: a tuple (2d array, 1d array) with the data and the sequence sizes
+    """
+    sizes = np.array([len(seq) for seq in sequences], np.int32)
+    array = np.zeros([len(sequences), sizes.max()], dtype)
+
+    for i, seq in enumerate(sequences):
+        array[i, :sizes[i]] = seq
+
+    return array, sizes
+
+
 def load_stopwords():
     """
     Return a set of stopwords
