@@ -11,7 +11,7 @@ import six
 from enum import Enum
 import numpy as np
 
-import lemmatization
+from . import lemmatization
 
 
 def _compat_repr(repr_string, encoding='utf-8'):
@@ -28,30 +28,32 @@ def _compat_repr(repr_string, encoding='utf-8'):
 
 class Dataset(object):
     """
-    Class for storing data in the format used by TED models.
+    Class for storing data in the format used by TEDIN models.
     """
 
-    def __init__(self, nodes1, nodes2, sizes1, sizes2, key_roots1, key_roots2,
-                 num_key_roots1, num_key_roots2, lmd1, lmd2, labels):
+    def __init__(self, pairs, nodes1, nodes2, sizes1, sizes2, labels):
+        """
+        Create a Dataset
+
+        :param pairs: list of Pair objects
+        :param nodes1: numpy array (num_pairs, max_len)
+        :param nodes2: numpy array (num_pairs, max_len)
+        :param sizes1: numpy array (num_pairs)
+        :param sizes2: numpy array (num_pairs)
+        :param labels: numpy array (num_pairs)
+        """
+        self.pairs = pairs
         self.nodes1 = nodes1
         self.nodes2 = nodes2
         self.sizes1 = sizes1
         self.sizes2 = sizes2
-        self.key_roots1 = key_roots1
-        self.key_roots2 = key_roots2
-        self.num_key_roots1 = num_key_roots1
-        self.num_key_roots2 = num_key_roots2
-        self.lmd1 = lmd1
-        self.lmd2 = lmd2
         self.labels = labels
+        self.last_batch_index = 0
         self.num_items = len(nodes1)
 
         # variables in the order they are given in the constructor
-        self._ordered_variables = [self.nodes1, self.nodes2, self.sizes1,
-                                   self.sizes2, self.key_roots1,
-                                   self.key_roots2, self.num_key_roots1,
-                                   self.num_key_roots2, self.lmd1, self.lmd2,
-                                   self.labels]
+        self._ordered_variables = [self.pairs, self.nodes1, self.nodes2,
+                                   self.sizes1, self.sizes2, self.labels]
 
     def __len__(self):
         return self.num_items
@@ -59,6 +61,39 @@ class Dataset(object):
     def __getitem__(self, item):
         arrays = [a[item] for a in self._ordered_variables]
         return Dataset(*arrays)
+
+    def combine(self, dataset):
+        """
+        Add the contents of `dataset` to this one.
+        """
+        self.pairs.extend(dataset.pairs)
+        self.nodes1 = np.concatenate([self.nodes1, dataset.nodes1])
+        self.nodes2 = np.concatenate([self.nodes2, dataset.nodes2])
+        self.sizes1 = np.concatenate([self.sizes1, dataset.sizes1])
+        self.sizes2 = np.concatenate([self.sizes2, dataset.sizes2])
+        self.labels = np.concatenate([self.labels, dataset.labels])
+        self.num_items = len(self.nodes1)
+
+    def next_batch(self, batch_size):
+        """
+        Return the next batch. If the end of the dataset is reached, it
+        automatically takes element from the beginning.
+
+        :param batch_size: int
+        :return: Dataset
+        """
+        next_index = self.last_batch_index + batch_size
+        batch = self[self.last_batch_index:next_index]
+
+        if next_index > self.num_items:
+            diff = batch_size - len(batch)
+            wrapped_batch = self[:diff]
+            batch.combine(wrapped_batch)
+            self.last_batch_index = diff
+        else:
+            self.last_batch_index = next_index
+
+        return batch
 
 
 # define an enum with possible entailment values
