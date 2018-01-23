@@ -49,7 +49,13 @@ class Dataset(object):
         self.sizes2 = sizes2
         self.labels = labels
         self.last_batch_index = 0
-        self.num_items = len(nodes1)
+        self._post_assignments()
+
+    def _post_assignments(self):
+        """
+        Assign variables to keep track of stuff.
+        """
+        self.num_items = len(self.nodes1)
 
         # variables in the order they are given in the constructor
         self._ordered_variables = [self.pairs, self.nodes1, self.nodes2,
@@ -72,7 +78,7 @@ class Dataset(object):
         self.sizes1 = np.concatenate([self.sizes1, dataset.sizes1])
         self.sizes2 = np.concatenate([self.sizes2, dataset.sizes2])
         self.labels = np.concatenate([self.labels, dataset.labels])
-        self.num_items = len(self.nodes1)
+        self._post_assignments()
 
     def next_batch(self, batch_size):
         """
