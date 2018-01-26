@@ -6,8 +6,9 @@ from __future__ import unicode_literals
 Functions for dealing with lemmatization.
 '''
 
-import config
 import logging
+
+from . import config
 
 unitex_dictionary = None
 udtags2delaf = {'VERB': 'V',

@@ -8,21 +8,6 @@ from tree_edit_network import TreeEditDistanceNetwork
 from trainable import Trainable
 
 
-class TedinParameters(tf.contrib.training.HParams):
-    """
-    Subclass of tf.contrib.training.HParams holding necessary paramters for
-    Tedin.
-    """
-    def __init__(self, learning_rate, dropout, num_hidden_units, vocab_size,
-                 embedding_size):
-        super(TedinParameters, self).__init__()
-        self.learning_rate = learning_rate
-        self.dropout = dropout
-        self.num_hidden_units = num_hidden_units
-        self.vocab_size = vocab_size
-        self.embedding_size = embedding_size
-
-
 class TreeComparisonNetwork(Trainable):
     """
     Class that learns parameters for tree edit distance comparison by training

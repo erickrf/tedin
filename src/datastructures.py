@@ -49,6 +49,7 @@ class Dataset(object):
         self.sizes2 = sizes2
         self.labels = labels
         self.last_batch_index = 0
+        self.epoch = 1
         self._post_assignments()
 
     def _post_assignments(self):
@@ -80,22 +81,26 @@ class Dataset(object):
         self.labels = np.concatenate([self.labels, dataset.labels])
         self._post_assignments()
 
-    def next_batch(self, batch_size):
+    def next_batch(self, batch_size, wrap=True):
         """
         Return the next batch. If the end of the dataset is reached, it
         automatically takes element from the beginning.
 
         :param batch_size: int
+        :param wrap: if True, wraps around the data, such that the desired batch
+            size is always returned. If False, the returned data size may be
+            less than `batch_size` if the end of the dataset is reached.
         :return: Dataset
         """
         next_index = self.last_batch_index + batch_size
         batch = self[self.last_batch_index:next_index]
 
-        if next_index > self.num_items:
+        if wrap and next_index > self.num_items:
             diff = batch_size - len(batch)
             wrapped_batch = self[:diff]
             batch.combine(wrapped_batch)
             self.last_batch_index = diff
+            self.epoch += 1
         else:
             self.last_batch_index = next_index
 

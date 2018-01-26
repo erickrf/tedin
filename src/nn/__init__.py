@@ -1,2 +1,2 @@
-from tree_edit_network import TreeEditDistanceNetwork
-from tree_comparison_network import TreeComparisonNetwork, TedinParameters
+from .tree_edit_network import TreeEditDistanceNetwork, create_tedin_dataset, \
+    TedinParameters

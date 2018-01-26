@@ -17,10 +17,10 @@ import numpy as np
 import nltk
 import os
 
-import config
-import datastructures as ds
-import openwordnetpt as own
-import ppdb
+from . import config
+from . import datastructures as ds
+from . import openwordnetpt as own
+from . import ppdb
 
 
 content_word_tags = {'NOUN', 'VERB', 'ADJ', 'ADV', 'PNOUN'}
@@ -111,6 +111,9 @@ def nested_list_to_array(sequences, dtype=np.int32):
     :param dtype: type of the numpy array
     :return: a tuple (2d array, 1d array) with the data and the sequence sizes
     """
+    if len(sequences) == 0:
+        return np.zeros([0, 0], dtype), np.zeros([0], np.int32)
+
     sizes = np.array([len(seq) for seq in sequences], np.int32)
     array = np.zeros([len(sequences), sizes.max()], dtype)
 
@@ -519,3 +522,16 @@ def load_embeddings(embeddings_path, normalize=True):
         embeddings = normalize_embeddings(embeddings)
 
     return wd, embeddings
+
+
+def get_logger(name='logger'):
+    """
+    Setup and return a simple logger.
+    :return:
+    """
+    logger = logging.getLogger(name)
+    handler = logging.StreamHandler()
+    logger.addHandler(handler)
+    logger.propagate = False
+
+    return logger
