@@ -379,8 +379,16 @@ class TreeEditDistanceNetwork(object):
             all_update_args1.append(updates1)
             all_update_args2.append(updates2)
 
-        insert_args, num_inserts = utils.nested_list_to_array(
-            all_insert_args)
+        try:
+            insert_args, num_inserts = utils.nested_list_to_array(
+                all_insert_args)
+        except ValueError:
+            print(len(batch))
+            print(all_insert_args)
+            print(all_remove_args)
+            print(all_update_args1)
+            raise
+
         remove_args, num_removes = utils.nested_list_to_array(
             all_remove_args)
         update_args1, num_updates = utils.nested_list_to_array(
@@ -447,8 +455,8 @@ class TreeEditDistanceNetwork(object):
                 self._reset_metrics()
 
                 valid_acc, valid_loss = self.run_validation(valid_data)
-                msg = '{} epochs\t{} steps\tTrain acc:{:.5}\t' \
-                      'Train loss:{:.5}\tValid acc:{:.5}\tValid loss:{:.5}'
+                msg = '{} epochs\t{} steps\tTrain acc: {:.5}\t' \
+                      'Train loss: {:.5}\tValid acc: {:.5}\tValid loss: {:.5}'
                 if valid_acc > best_acc:
                     saver.save(self.session, filename, step)
                     best_acc = valid_acc
@@ -496,6 +504,7 @@ class TreeEditDistanceNetwork(object):
         accumulated_loss = 0
         accumulated_acc = 0
         num_batches = int(len(data) / batch_size)
+        data.reset_batch_counter()
         for _ in range(num_batches):
             batch = data.next_batch(batch_size, wrap=False)
             acc, loss = self._run(batch, [self.accuracy, self.loss],

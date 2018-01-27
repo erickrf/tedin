@@ -52,6 +52,15 @@ class Dataset(object):
         self.epoch = 1
         self._post_assignments()
 
+    def reset_batch_counter(self):
+        """
+        Reset the batch counter in the dataset.
+
+        New calls to next_batch will yield data from the beginning of the
+        dataset.
+        """
+        self.last_batch_index = 0
+
     def _post_assignments(self):
         """
         Assign variables to keep track of stuff.

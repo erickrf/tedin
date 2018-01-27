@@ -112,7 +112,7 @@ def nested_list_to_array(sequences, dtype=np.int32):
     :return: a tuple (2d array, 1d array) with the data and the sequence sizes
     """
     if len(sequences) == 0:
-        return np.zeros([0, 0], dtype), np.zeros([0], np.int32)
+        raise ValueError('Empty sequence')
 
     sizes = np.array([len(seq) for seq in sequences], np.int32)
     array = np.zeros([len(sequences), sizes.max()], dtype)
