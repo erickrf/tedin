@@ -31,7 +31,7 @@ class Dataset(object):
     Class for storing data in the format used by TEDIN models.
     """
 
-    def __init__(self, pairs, nodes1, nodes2, sizes1, sizes2, labels):
+    def __init__(self, pairs, nodes1, nodes2, sizes1, sizes2, labels=None):
         """
         Create a Dataset
 
@@ -40,7 +40,7 @@ class Dataset(object):
         :param nodes2: numpy array (num_pairs, max_len)
         :param sizes1: numpy array (num_pairs)
         :param sizes2: numpy array (num_pairs)
-        :param labels: numpy array (num_pairs)
+        :param labels: numpy array (num_pairs) or None
         """
         self.pairs = pairs
         self.nodes1 = nodes1
@@ -61,6 +61,18 @@ class Dataset(object):
         """
         self.last_batch_index = 0
 
+    def shuffle(self):
+        """
+        Shuffle the data in the Dataset
+        """
+        state = np.random.get_state()
+        for array in self._ordered_variables:
+            # don't set the state after shuffling; we don't want the next call
+            # after this function is finished to repeat the ordering
+            np.random.set_state(state)
+            np.random.shuffle(array)
+            state = np.random.get_state()
+
     def _post_assignments(self):
         """
         Assign variables to keep track of stuff.
@@ -69,7 +81,9 @@ class Dataset(object):
 
         # variables in the order they are given in the constructor
         self._ordered_variables = [self.pairs, self.nodes1, self.nodes2,
-                                   self.sizes1, self.sizes2, self.labels]
+                                   self.sizes1, self.sizes2]
+        if self.labels is not None:
+            self._ordered_variables.append(self.labels)
 
     def __len__(self):
         return self.num_items
@@ -87,10 +101,11 @@ class Dataset(object):
         self.nodes2 = np.concatenate([self.nodes2, dataset.nodes2])
         self.sizes1 = np.concatenate([self.sizes1, dataset.sizes1])
         self.sizes2 = np.concatenate([self.sizes2, dataset.sizes2])
-        self.labels = np.concatenate([self.labels, dataset.labels])
+        if self.labels is not None:
+            self.labels = np.concatenate([self.labels, dataset.labels])
         self._post_assignments()
 
-    def next_batch(self, batch_size, wrap=True):
+    def next_batch(self, batch_size, wrap=True, shuffle=True):
         """
         Return the next batch. If the end of the dataset is reached, it
         automatically takes element from the beginning.
@@ -99,6 +114,7 @@ class Dataset(object):
         :param wrap: if True, wraps around the data, such that the desired batch
             size is always returned. If False, the returned data size may be
             less than `batch_size` if the end of the dataset is reached.
+        :param shuffle: if wrap is True, shuffle the dataset before wrapping
         :return: Dataset
         """
         next_index = self.last_batch_index + batch_size
@@ -106,6 +122,8 @@ class Dataset(object):
 
         if wrap and next_index > self.num_items:
             diff = batch_size - len(batch)
+            if shuffle:
+                self.shuffle()
             wrapped_batch = self[:diff]
             batch.combine(wrapped_batch)
             self.last_batch_index = diff
