@@ -62,7 +62,7 @@ def find_zss_operations(pair, insert_costs, remove_costs, update_cost_fn):
     root_h = tree_h.root
 
     _, ops = zss.distance(root_t, root_h, get_children, get_insert_cost,
-                          get_remove_cost, update_cost_fn, lambda _: None)
+                          get_remove_cost, update_cost_fn)
     return ops
 
 
