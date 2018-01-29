@@ -26,15 +26,15 @@ class TedinParameters(tf.contrib.training.HParams):
     Subclass of tf.contrib.training.HParams holding necessary paramters for
     Tedin.
     """
-    def __init__(self, learning_rate, dropout, batch_size, num_steps, l2=0,
+    def __init__(self, learning_rate, dropout, batch_size, num_steps,
+                 num_units, embeddings_shape, num_classes, l2=0,
                  gradient_clipping=None):
-        super(TedinParameters, self).__init__()
-        self.learning_rate = learning_rate
-        self.dropout = dropout
-        self.batch_size = batch_size
-        self.l2 = l2
-        self.gradient_clipping = gradient_clipping
-        self.num_steps = num_steps
+        super(TedinParameters, self).__init__(
+            learning_rate=learning_rate, dropout=dropout, batch_size=batch_size,
+            l2=l2, gradient_clipping=gradient_clipping, num_steps=num_steps,
+            num_units=num_units, embeddings_shape=embeddings_shape,
+            num_classes=num_classes
+        )
 
 
 def find_zss_operations(pair, insert_costs, remove_costs, update_cost_fn):
@@ -66,6 +66,43 @@ def find_zss_operations(pair, insert_costs, remove_costs, update_cost_fn):
     return ops
 
 
+def mask_2d(inputs, lengths, mask_value):
+    """
+    Mask the values past sequence length
+
+    :param inputs: tensor (batch, time_steps, units)
+    :param lengths: tensor (batch) with the real length (non-padding) of each
+        item
+    :param mask_value: mask value
+    :return: masked values
+    """
+    max_length = tf.shape(inputs)[1]
+    mask = tf.sequence_mask(lengths, max_length, name='mask')
+    masked = tf.where(mask, inputs, mask_value * tf.ones_like(inputs))
+
+    return masked
+
+
+def mask_3d(inputs, lengths, mask_value):
+    """
+    Mask the values past sequence length
+
+    :param inputs: tensor (batch, time_steps, units)
+    :param lengths: tensor (batch) with the real length (non-padding) of each
+        item
+    :param mask_value: mask value
+    :return: masked values
+    """
+    max_length = tf.shape(inputs)[1]
+    num_units = tf.shape(inputs)[2]
+    mask = tf.sequence_mask(lengths, max_length, name='mask')
+    mask3d = tf.tile(tf.expand_dims(mask, 2),
+                     [1, 1, num_units])
+    masked = tf.where(mask3d, inputs, mask_value * tf.ones_like(inputs))
+
+    return masked
+
+
 def create_tedin_dataset(pairs, wd, lower=True):
     """
     Create a Dataset object to feed a Tedin model.
@@ -86,8 +123,19 @@ def create_tedin_dataset(pairs, wd, lower=True):
     for pair in pairs:
         t = pair.annotated_t
         h = pair.annotated_h
-        nodes1.append([index(token.text) for token in t.tokens])
-        nodes2.append([index(token.text) for token in h.tokens])
+        t_indices = []
+        h_indices = []
+
+        for token in t.tokens:
+            token.index = index(token.text)
+            t_indices.append(token.index)
+
+        for token in h.tokens:
+            token.index = index(token.text)
+            h_indices.append(token.index)
+
+        nodes1.append(t_indices)
+        nodes2.append(h_indices)
         labels.append(pair.entailment.value)
 
     nodes1, sizes1 = utils.nested_list_to_array(nodes1)
@@ -105,14 +153,28 @@ class TreeEditDistanceNetwork(object):
     """
     filename = 'tedin'
 
-    def __init__(self, num_hidden_units, embeddings_shape, num_classes):
+    def __init__(self, params, session=None, embeddings_variable=None,
+                 reuse_weights=False, create_optimizer=True):
         """
+        :param params: TedinParameters
+        :type params: TedinParameters
+        :param session: tensorflow session or None. If None, a new session is
+            created, otherwise the supplied one is used.
+        :param reuse_weights: if True, all weights will be reused.
+        :param embeddings_variable: tensorflow variable or None. If given, it
+            must be a tensorflow variable initialized by a placeholder to hold
+            embedding values. It should be used when sharing the embeddings
+            with another model.
+        :param create_optimizer: if True, create an optimizer for the labeled
+            problem. It should be false when using two instances in tandem for
+            the ranking task.
+        """
+        if session is None:
+            session = tf.Session()
 
-        :param num_hidden_units: number of units in hidden layers
-        """
-        self.session = tf.Session()
-        self.num_hidden_units = num_hidden_units
-        self.num_classes = num_classes
+        self.session = session
+        self.num_hidden_units = params.num_units
+        self.num_classes = params.num_classes
         self.logger = utils.get_logger(self.__class__.__name__)
 
         # hyperparameters
@@ -120,28 +182,64 @@ class TreeEditDistanceNetwork(object):
         self.dropout_keep = tf.placeholder_with_default(
             1., None, 'dropout_keep')
 
-        self.embedding_ph = tf.placeholder(tf.float32, embeddings_shape,
-                                           'word_embeddings_ph')
-
         # labels for the supervised training
         self.labels = tf.placeholder(tf.int32, [None], 'labels')
 
         # operations applied to a sentence pair (batch, max_num_ops)
         self.operations = tf.placeholder(tf.int32, [None, None], 'operations')
 
-        self.embeddings = tf.Variable(self.embedding_ph, trainable=False,
-                                      validate_shape=True, name='embeddings')
+        if embeddings_variable is None:
+            self.embedding_ph = tf.placeholder(
+                tf.float32, params.embeddings_shape, 'word_embeddings_ph')
+            embeddings_variable = tf.Variable(
+                self.embedding_ph, trainable=False, validate_shape=True,
+                name='embeddings')
 
+        self.embeddings = embeddings_variable
         self.update_cache = {}
 
         # control weights already initialized
+        self.reuse_weights = reuse_weights
         self._initialized_weights = set()
         self._define_operation_costs()
-        self._define_supervised_classifier()
+        self._define_computation_graph(create_optimizer)
 
-    def _define_supervised_classifier(self):
+    def _define_transformation_cost(self):
         """
-        Define the tensors related to the supervised classification of pairs
+        Define the tensors related to the total transformation cost.
+
+        This is used when training the model for pairwise ranking.
+        """
+        def sum_real_operation_costs(scope, args1, args2, length):
+            """
+            Sum the costs of the real (non-padding) operations
+            """
+            # padded_costs is (batch, num_operations)
+            padded_costs = self._compute_operation_cost(scope, args1, args2)
+
+            # mask to zero the values of padding operations
+            real_costs = mask_2d(padded_costs, length, 0)
+
+            # total_costs is (batch,)
+            total_costs = tf.reduce_sum(real_costs, 1, name='total_costs')
+
+            return total_costs
+
+        costs_insert = sum_real_operation_costs('insert', self.emb_insert,
+                                                None, self.num_inserts)
+        costs_remove = sum_real_operation_costs('remove', self.emb_remove,
+                                                None, self.num_removes)
+        costs_update = sum_real_operation_costs(
+            'update', self.emb_update1, self.emb_update2, self.num_updates)
+
+        self.transformation_cost = costs_insert + costs_remove + costs_update
+
+    def _define_computation_graph(self, create_optimizer):
+        """
+        Define the tensors for the modeling the TEDIN operations.
+
+        It creates tensors for both the supervised classification step and the
+        unsupervised ranking.
         """
         # arguments of operations; shape is always (batch, max_num_ops)
         # each batch item has all the nodes (word indices) given as argument
@@ -159,16 +257,30 @@ class TreeEditDistanceNetwork(object):
         self.num_updates = tf.placeholder(tf.int32, [None], 'num_updates')
 
         # these embedded values are (batch, max_ops, embedding_size)
-        emb_insert = tf.nn.embedding_lookup(self.embeddings, self.args_insert)
-        emb_remove = tf.nn.embedding_lookup(self.embeddings, self.args_remove)
-        emb_update1 = tf.nn.embedding_lookup(self.embeddings, self.args1_update)
-        emb_update2 = tf.nn.embedding_lookup(self.embeddings, self.args2_update)
+        self.emb_insert = tf.nn.embedding_lookup(self.embeddings,
+                                                 self.args_insert)
+        self.emb_remove = tf.nn.embedding_lookup(self.embeddings,
+                                                 self.args_remove)
+        self.emb_update1 = tf.nn.embedding_lookup(self.embeddings,
+                                                  self.args1_update)
+        self.emb_update2 = tf.nn.embedding_lookup(self.embeddings,
+                                                  self.args2_update)
 
+        # these functions define the rest of the tensors specific for each task
+        self._define_transformation_cost()
+        self._define_supervised_classifier(create_optimizer)
+
+    def _define_supervised_classifier(self, create_optimizer):
+        """
+        Define the tensors related to the supervised classification of pairs
+        """
         # all representations are (batch, max_ops, hidden_units)
-        rep_insert = self.get_operation_representation('insert', emb_insert)
-        rep_remove = self.get_operation_representation('remove', emb_remove)
-        rep_update = self.get_operation_representation('update', emb_update1,
-                                                       emb_update2)
+        rep_insert = self.get_operation_representation(
+            'insert', self.emb_insert)
+        rep_remove = self.get_operation_representation(
+            'remove', self.emb_remove)
+        rep_update = self.get_operation_representation(
+            'update', self.emb_update1, self.emb_update2)
 
         # run separate convolutions on the 3 sequences and then take one single
         # maximum. this is because joining them could be harder.
@@ -181,7 +293,7 @@ class TreeEditDistanceNetwork(object):
             max_values = tf.reduce_max(tensor_list, 0)
             conv_output = tf.nn.dropout(max_values, self.dropout_keep)
 
-        with tf.variable_scope('softmax'):
+        with tf.variable_scope('softmax', reuse=self.reuse_weights):
             init = tf.glorot_normal_initializer()
             logits = tf.layers.dense(conv_output, self.num_classes,
                                      kernel_initializer=init)
@@ -198,8 +310,9 @@ class TreeEditDistanceNetwork(object):
         cross_ent = tf.losses.sparse_softmax_cross_entropy(self.labels, logits)
         self.loss = tf.reduce_mean(cross_ent, name='loss')
 
-        optimizer = tf.train.AdagradOptimizer(self.learning_rate)
-        self.train_op = optimizer.minimize(self.loss)
+        if create_optimizer:
+            optimizer = tf.train.AdagradOptimizer(self.learning_rate)
+            self.train_op = optimizer.minimize(self.loss)
 
     def _convolution(self, inputs, lengths, reuse=False):
         """
@@ -212,15 +325,12 @@ class TreeEditDistanceNetwork(object):
         :param inputs: tensor (batch, time_steps, num_units)
         :return: tensor (batch, num_units)
         """
+        reuse = reuse or self.reuse_weights
         with tf.variable_scope('convolution', reuse=reuse):
             hidden = tf.layers.dense(inputs, self.num_hidden_units, tf.nn.relu)
 
             # mask positions after sequence end with -inf
-            max_length = tf.shape(inputs)[1]
-            mask = tf.sequence_mask(lengths, max_length, name='mask')
-            mask3d = tf.tile(tf.expand_dims(mask, 2),
-                             [1, 1, self.num_hidden_units])
-            masked = tf.where(mask3d, hidden, -np.inf * tf.ones_like(hidden))
+            masked = mask_3d(hidden, lengths, -np.inf)
             max_values = tf.reduce_max(masked, 1)
 
         return max_values
@@ -252,9 +362,6 @@ class TreeEditDistanceNetwork(object):
         self.update_cost = self._compute_operation_cost(
             'update', single_embedded1, single_embedded2)
 
-    def classify_operation_sequence(self):
-        pass
-
     def _compute_operation_cost(self, scope, node1, node2=None):
         """
         Apply a two-layer transformation to the input nodes yielding an
@@ -273,7 +380,7 @@ class TreeEditDistanceNetwork(object):
                                                               node2)
 
         scope = 'operation_cost'
-        reuse = scope in self._initialized_weights
+        reuse = self.reuse_weights or (scope in self._initialized_weights)
         self._initialized_weights.add(scope)
         with tf.variable_scope(scope, reuse=reuse):
             init = tf.glorot_normal_initializer()
@@ -311,7 +418,7 @@ class TreeEditDistanceNetwork(object):
         else:
             inputs = tf.concat([node1, node2], axis=-1)
 
-        reuse = operation in self._initialized_weights
+        reuse = self.reuse_weights or (operation in self._initialized_weights)
         self._initialized_weights.add(operation)
         with tf.variable_scope(operation, reuse=reuse):
             hidden = tf.layers.dense(inputs, self.num_hidden_units, tf.nn.relu)
@@ -337,12 +444,12 @@ class TreeEditDistanceNetwork(object):
             # take the embedding index of each word
             id1 = node1.index
             id2 = node2.index
-            if (node1, node2) in self.update_cache:
+            if (id1, id2) in self.update_cache:
                 return self.update_cache[(id1, id2)]
 
             feeds = {self.single_node1: [id1], self.single_node2: [id2]}
             cost = self.update_cost.eval(feeds, session=self.session)[0]
-            self.update_cache[(node1, node2)] = cost
+            self.update_cache[(id1, id2)] = cost
 
             return cost
 
@@ -379,16 +486,8 @@ class TreeEditDistanceNetwork(object):
             all_update_args1.append(updates1)
             all_update_args2.append(updates2)
 
-        try:
-            insert_args, num_inserts = utils.nested_list_to_array(
-                all_insert_args)
-        except ValueError:
-            print(len(batch))
-            print(all_insert_args)
-            print(all_remove_args)
-            print(all_update_args1)
-            raise
-
+        insert_args, num_inserts = utils.nested_list_to_array(
+            all_insert_args)
         remove_args, num_removes = utils.nested_list_to_array(
             all_remove_args)
         update_args1, num_updates = utils.nested_list_to_array(
@@ -408,7 +507,7 @@ class TreeEditDistanceNetwork(object):
         Initialize trainable variables and embeddings.
 
         :param embeddings: numpy array matching the shape given to the
-            constructor
+            constructor.
         """
         self.logger.debug('Initializing variables')
         feed = {self.embedding_ph: embeddings}
@@ -452,6 +551,7 @@ class TreeEditDistanceNetwork(object):
             if step % report_interval == 0:
                 train_acc = self.session.run(self.moving_acc)
                 train_loss = accumulated_training_loss / loss_denominator
+                accumulated_training_loss = 0
                 self._reset_metrics()
 
                 valid_acc, valid_loss = self.run_validation(valid_data)

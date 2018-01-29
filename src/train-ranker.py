@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 """
+Train an unsupervised pair ranker that learns weights for tree edit distance
+operations.
 """
 
 from __future__ import division, print_function, unicode_literals
@@ -8,8 +10,43 @@ from __future__ import division, print_function, unicode_literals
 import argparse
 import logging
 
-from . import nn
 from . import utils
+from . import nn
+from . import datastructures as ds
+
+
+def split_paraphrase_neutral(pairs):
+    """
+    Split a list of pairs into two lists: one containing only paraphrases
+    and the other containing only neutral pairs.
+
+    :return: tuple (paraphases, neutrals)
+    """
+    paraphrases = [pair for pair in pairs
+                   if pair.entailment == ds.Entailment.paraphrase]
+    neutrals = [pair for pair in pairs
+                if pair.entailment == ds.Entailment.none]
+
+    return paraphrases, neutrals
+
+
+def load_pairs(path, wd):
+    """
+    Load a pickle file with pairs and do some necessary preprocessing.
+
+    :param path: path to saved pairs
+    :param wd: word dictionary
+    :return: tuple of ds.Datasets (positive, negative)
+    """
+    pairs = utils.read_pairs(path)
+    pos_pairs, neg_pairs = split_paraphrase_neutral(pairs)
+    pos_data = nn.create_tedin_dataset(pos_pairs, wd)
+    neg_data = nn.create_tedin_dataset(neg_pairs, wd)
+
+    msg = '%d positive and %d negative pairs' % (len(pos_data), len(neg_data))
+    logging.info(msg)
+
+    return pos_data, neg_data
 
 
 if __name__ == '__main__':
@@ -32,21 +69,17 @@ if __name__ == '__main__':
     parser.add_argument('-f', help='Evaluation frequency', type=int, default=50,
                         dest='eval_frequency')
     args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO)
 
     wd, embeddings = utils.load_embeddings(args.embeddings)
-
-    train_pairs = utils.read_pairs(args.train)
-    valid_pairs = utils.read_pairs(args.valid)
-    # utils.assign_word_indices(train_pairs, wd)
-    # utils.assign_word_indices(valid_pairs, wd)
-
-    train_data = nn.create_tedin_dataset(train_pairs, wd)
-    valid_data = nn.create_tedin_dataset(valid_pairs, wd)
+    train_data = load_pairs(args.train, wd)
+    valid_data = load_pairs(args.valid, wd)
 
     params = nn.TedinParameters(args.learning_rate, args.dropout, args.batch,
                                 args.steps, args.num_units, embeddings.shape, 3)
 
-    tedin = nn.TreeEditDistanceNetwork(params)
-    tedin.initialize(embeddings)
-    tedin.train(train_data, valid_data, params, args.model, args.eval_frequency)
+    ranker = nn.PairRanker(params)
+    ranker.initialize(embeddings)
+    ranker.train(train_data, valid_data, params,
+                 args.model, args.eval_frequency)

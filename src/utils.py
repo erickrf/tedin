@@ -123,6 +123,32 @@ def nested_list_to_array(sequences, dtype=np.int32):
     return array, sizes
 
 
+def assign_word_indices(pairs, wd, lower=True):
+    """
+    Assign each token in the sentences of pairs their embedding index.
+
+    Changes are in-place.
+
+    This is done here instead of in a pre-processing stage to allow for
+    different embedding models with different vocabularies.
+
+    :param pairs: list of Pair objects
+    :param wd: dictionary mapping strings to ints
+    :param lower: whether to lowercase tokens before indexing
+    """
+    def get_index(token):
+        if lower:
+            return wd[token.lower()]
+        return wd[token]
+
+    for pair in pairs:
+        for token in pair.annotated_t.tokens:
+            token.index = get_index(token.text)
+
+        for token in pair.annotated_h.tokens:
+            token.index = get_index(token.text)
+
+
 def load_stopwords():
     """
     Return a set of stopwords
