@@ -15,6 +15,7 @@ from collections import defaultdict
 from xml.dom import minidom
 import numpy as np
 import nltk
+import json
 import os
 
 from . import config
@@ -101,13 +102,18 @@ def tokenize_sentence(text, change_quotes=True, change_digits=False):
     return tokenizer.tokenize(text)
 
 
-def nested_list_to_array(sequences, dtype=np.int32):
+def nested_list_to_array(sequences, dtype=np.int32, dim3=None):
     """
-    Create a numpy 2d array with the content of sequences.
+    Create a numpy array with the content of sequences.
 
     In case of sublists with different sizes, the array is padded with zeros.
 
-    :param sequences: a list of sublists
+    If the given sequences are a list of lists, a 2d array is created and dim3
+    should be None. In case of a 3-level list, the third level sublists must
+    always have the same size and be provided in dim3.
+
+    :param sequences: a list of sublists or 3-level lists. In the latter case,
+        the third level sublists must always have the same size.
     :param dtype: type of the numpy array
     :return: a tuple (2d array, 1d array) with the data and the sequence sizes
     """
@@ -115,12 +121,29 @@ def nested_list_to_array(sequences, dtype=np.int32):
         raise ValueError('Empty sequence')
 
     sizes = np.array([len(seq) for seq in sequences], np.int32)
-    array = np.zeros([len(sequences), sizes.max()], dtype)
+
+    if dim3 is None:
+        shape = [len(sequences), sizes.max()]
+    else:
+        shape = [len(sequences), sizes.max(), dim3]
+
+    array = np.zeros(shape, dtype)
 
     for i, seq in enumerate(sequences):
-        array[i, :sizes[i]] = seq
+        if len(seq):
+            array[i, :sizes[i]] = seq
 
     return array, sizes
+
+
+def load_label_dict(path):
+    """
+    Load the label dictionary from a json file.
+    """
+    with open(path, 'r') as f:
+        d = json.load(f)
+
+    return d
 
 
 def assign_word_indices(pairs, wd, lower=True):
@@ -556,8 +579,9 @@ def get_logger(name='logger'):
     :return:
     """
     logger = logging.getLogger(name)
-    handler = logging.StreamHandler()
-    logger.addHandler(handler)
+    if not logger.hasHandlers():
+        handler = logging.StreamHandler()
+        logger.addHandler(handler)
     logger.propagate = False
 
     return logger

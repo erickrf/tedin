@@ -27,12 +27,13 @@ class TedinParameters(tf.contrib.training.HParams):
     Tedin.
     """
     def __init__(self, learning_rate, dropout, batch_size, num_steps,
-                 num_units, embeddings_shape, num_classes, l2=0,
-                 gradient_clipping=None):
+                 num_units, embeddings_shape, label_embeddings_shape,
+                 num_classes, l2=0, gradient_clipping=None):
         super(TedinParameters, self).__init__(
             learning_rate=learning_rate, dropout=dropout, batch_size=batch_size,
             l2=l2, gradient_clipping=gradient_clipping, num_steps=num_steps,
             num_units=num_units, embeddings_shape=embeddings_shape,
+            label_embeddings_shape=label_embeddings_shape,
             num_classes=num_classes
         )
 
@@ -103,12 +104,13 @@ def mask_3d(inputs, lengths, mask_value):
     return masked
 
 
-def create_tedin_dataset(pairs, wd, lower=True):
+def create_tedin_dataset(pairs, wd, label_dict, lower=True):
     """
     Create a Dataset object to feed a Tedin model.
 
     :param pairs: list of parsed Pair objects
     :param wd: word dictionary mapping tokens to integers
+    :param label_dict: dictionary mapping syntactic labels to integers
     :param lower: whether to lowercase tokens
     :return: Dataset
     """
@@ -128,21 +130,24 @@ def create_tedin_dataset(pairs, wd, lower=True):
 
         for token in t.tokens:
             token.index = index(token.text)
-            t_indices.append(token.index)
+            token.dep_index = label_dict[token.dependency_relation]
+            t_indices.append([token.index, token.dep_index])
 
         for token in h.tokens:
             token.index = index(token.text)
-            h_indices.append(token.index)
+            token.dep_index = label_dict[token.dependency_relation]
+            h_indices.append([token.index, token.dep_index])
 
         nodes1.append(t_indices)
         nodes2.append(h_indices)
         labels.append(pair.entailment.value)
 
-    nodes1, sizes1 = utils.nested_list_to_array(nodes1)
-    nodes2, sizes2 = utils.nested_list_to_array(nodes2)
+    nodes1, _ = utils.nested_list_to_array(nodes1, dim3=2)
+    nodes2, _ = utils.nested_list_to_array(nodes2, dim3=2)
+
     # labels are originally numbered starting from 1
     labels = np.array(labels) - 1
-    dataset = Dataset(pairs, nodes1, nodes2, sizes1, sizes2, labels)
+    dataset = Dataset(pairs, nodes1, nodes2, labels)
 
     return dataset
 
@@ -153,7 +158,7 @@ class TreeEditDistanceNetwork(object):
     """
     filename = 'tedin'
 
-    def __init__(self, params, session=None, embeddings_variable=None,
+    def __init__(self, params, session=None, embeddings_variables=None,
                  reuse_weights=False, create_optimizer=True):
         """
         :param params: TedinParameters
@@ -161,10 +166,8 @@ class TreeEditDistanceNetwork(object):
         :param session: tensorflow session or None. If None, a new session is
             created, otherwise the supplied one is used.
         :param reuse_weights: if True, all weights will be reused.
-        :param embeddings_variable: tensorflow variable or None. If given, it
-            must be a tensorflow variable initialized by a placeholder to hold
-            embedding values. It should be used when sharing the embeddings
-            with another model.
+        :param embeddings_variables: list of tensorflow variables or None.
+            It should be used when sharing the embeddings with another model.
         :param create_optimizer: if True, create an optimizer for the labeled
             problem. It should be false when using two instances in tandem for
             the ranking task.
@@ -188,14 +191,22 @@ class TreeEditDistanceNetwork(object):
         # operations applied to a sentence pair (batch, max_num_ops)
         self.operations = tf.placeholder(tf.int32, [None, None], 'operations')
 
-        if embeddings_variable is None:
+        if embeddings_variables is None:
             self.embedding_ph = tf.placeholder(
                 tf.float32, params.embeddings_shape, 'word_embeddings_ph')
-            embeddings_variable = tf.Variable(
+            word_embeddings = tf.Variable(
                 self.embedding_ph, trainable=False, validate_shape=True,
                 name='embeddings')
+            with tf.variable_scope('attribute-embedding', reuse=reuse_weights):
+                label_embeddings = tf.get_variable(
+                    'dependency_embeddings', params.label_embeddings_shape,
+                    tf.float32, tf.random_normal_initializer(0, 0.1))
+        else:
+            word_embeddings, label_embeddings = embeddings_variables
 
-        self.embeddings = embeddings_variable
+        # "label" here refers to the node labels, not the target class
+        self.embeddings = word_embeddings
+        self.label_embeddings = label_embeddings
         self.update_cache = {}
 
         # control weights already initialized
@@ -241,14 +252,16 @@ class TreeEditDistanceNetwork(object):
         It creates tensors for both the supervised classification step and the
         unsupervised ranking.
         """
-        # arguments of operations; shape is always (batch, max_num_ops)
-        # each batch item has all the nodes (word indices) given as argument
-        # for that operation in that pair
-        self.args_insert = tf.placeholder(tf.int32, [None, None], 'args_insert')
-        self.args_remove = tf.placeholder(tf.int32, [None, None], 'args_remove')
-        self.args1_update = tf.placeholder(tf.int32, [None, None],
+        # node arguments of operations; shape is always (batch, max_num_ops, 2)
+        # each batch item has all the nodes (word and label indices) given as
+        # argument for that operation in that pair
+        self.args_insert = tf.placeholder(tf.int32, [None, None, 2],
+                                          'args_insert')
+        self.args_remove = tf.placeholder(tf.int32, [None, None, 2],
+                                          'args_remove')
+        self.args1_update = tf.placeholder(tf.int32, [None, None, 2],
                                            'args1_update')
-        self.args2_update = tf.placeholder(tf.int32, [None, None],
+        self.args2_update = tf.placeholder(tf.int32, [None, None, 2],
                                            'args2_update')
 
         # these are the lengths of the sequences of operations
@@ -257,14 +270,10 @@ class TreeEditDistanceNetwork(object):
         self.num_updates = tf.placeholder(tf.int32, [None], 'num_updates')
 
         # these embedded values are (batch, max_ops, embedding_size)
-        self.emb_insert = tf.nn.embedding_lookup(self.embeddings,
-                                                 self.args_insert)
-        self.emb_remove = tf.nn.embedding_lookup(self.embeddings,
-                                                 self.args_remove)
-        self.emb_update1 = tf.nn.embedding_lookup(self.embeddings,
-                                                  self.args1_update)
-        self.emb_update2 = tf.nn.embedding_lookup(self.embeddings,
-                                                  self.args2_update)
+        self.emb_insert = self._embed_nodes(self.args_insert)
+        self.emb_remove = self._embed_nodes(self.args_remove)
+        self.emb_update1 = self._embed_nodes(self.args1_update)
+        self.emb_update2 = self._embed_nodes(self.args2_update)
 
         # these functions define the rest of the tensors specific for each task
         self._define_transformation_cost()
@@ -339,28 +348,51 @@ class TreeEditDistanceNetwork(object):
         """
         Define the tensors related to the cost of tree edit operations
         """
-        # nodes are the tokens; shape is (batch, sentence_length)
-        self.nodes1 = tf.placeholder(tf.int32, [None, None], 'nodes1')
-        self.nodes2 = tf.placeholder(tf.int32, [None, None], 'nodes2')
+        # nodes are the tokens and their dependency relation
+        # shape is (batch, sentence_length, 2); 2 means word idx, relation idx
+        self.nodes1 = tf.placeholder(tf.int32, [None, None, 2], 'nodes1')
+        self.nodes2 = tf.placeholder(tf.int32, [None, None, 2], 'nodes2')
 
         # single nodes are used for computing update costs for a node pair
-        self.single_node1 = tf.placeholder(tf.int32, [None], 'single_node1')
-        self.single_node2 = tf.placeholder(tf.int32, [None], 'single_node2')
+        # fake batch dimension is necessary even if we treat a single node
+        self.single_node1 = tf.placeholder(tf.int32, [None, 2], 'single_node1')
+        self.single_node2 = tf.placeholder(tf.int32, [None, 2], 'single_node2')
 
-        embedded1 = tf.nn.embedding_lookup(self.embeddings, self.nodes1)
-        embedded2 = tf.nn.embedding_lookup(self.embeddings, self.nodes2)
+        # "label" here is used in the sense of syntactic tree label
+        embedded1 = self._embed_nodes(self.nodes1)
+        embedded2 = self._embed_nodes(self.nodes2)
         self.remove_costs = self._compute_operation_cost('remove', embedded1)
         self.insert_costs = self._compute_operation_cost('insert', embedded2)
 
         # computing all node1/node2 update combinations is too expensive and
         # unnecessary. Instead, call it as needed with a pair of nodes.
         self.update_cache = {}
-        single_embedded1 = tf.nn.embedding_lookup(self.embeddings,
-                                                  self.single_node1)
-        single_embedded2 = tf.nn.embedding_lookup(self.embeddings,
-                                                  self.single_node2)
+        single_embedded1 = self._embed_nodes(self.single_node1)
+        single_embedded2 = self._embed_nodes(self.single_node2)
         self.update_cost = self._compute_operation_cost(
             'update', single_embedded1, single_embedded2)
+
+    def _embed_nodes(self, nodes):
+        """
+        Return the embedded node representation
+
+        :param nodes: either a 2d or 3d tensor (batch, 2) or (batch, num_nodes,
+            2). 2 means the word index and node label index.
+        :return: either a 2d or 3d tensor
+        """
+        if len(nodes.get_shape()) == 2:
+            word_inds = nodes[:, 0]
+            label_inds = nodes[:, 1]
+        else:
+            word_inds = nodes[:, :, 0]
+            label_inds = nodes[:, :, 1]
+
+        embedded_token = tf.nn.embedding_lookup(self.embeddings, word_inds)
+        embedded_label = tf.nn.embedding_lookup(self.label_embeddings,
+                                                label_inds)
+        embedded = tf.concat([embedded_token, embedded_label], -1,
+                             'node_embedding')
+        return embedded
 
     def _compute_operation_cost(self, scope, node1, node2=None):
         """
@@ -444,12 +476,16 @@ class TreeEditDistanceNetwork(object):
             # take the embedding index of each word
             id1 = node1.index
             id2 = node2.index
-            if (id1, id2) in self.update_cache:
-                return self.update_cache[(id1, id2)]
+            label1 = node1.dep_index
+            label2 = node2.dep_index
+            key = (id1, label1, id2, label2)
+            if key in self.update_cache:
+                return self.update_cache[key]
 
-            feeds = {self.single_node1: [id1], self.single_node2: [id2]}
+            feeds = {self.single_node1: [[id1, label1]],
+                     self.single_node2: [[id2, label2]]}
             cost = self.update_cost.eval(feeds, session=self.session)[0]
-            self.update_cache[(id1, id2)] = cost
+            self.update_cache[key] = cost
 
             return cost
 
@@ -473,13 +509,15 @@ class TreeEditDistanceNetwork(object):
             updates1 = []
             updates2 = []
             for op in operations:
+                a1 = op.arg1
+                a2 = op.arg2
                 if op.type == INSERT:
-                    inserts.append(op.arg2.index)
+                    inserts.append([a2.index, a2.dep_index])
                 elif op.type == REMOVE:
-                    removes.append(op.arg1.index)
+                    removes.append([a1.index, a1.dep_index])
                 elif op.type == UPDATE:
-                    updates1.append(op.arg1.index)
-                    updates2.append(op.arg2.index)
+                    updates1.append([a1.index, a1.dep_index])
+                    updates2.append([a2.index, a2.dep_index])
 
             all_insert_args.append(inserts)
             all_remove_args.append(removes)
@@ -487,13 +525,13 @@ class TreeEditDistanceNetwork(object):
             all_update_args2.append(updates2)
 
         insert_args, num_inserts = utils.nested_list_to_array(
-            all_insert_args)
+            all_insert_args, dim3=2)
         remove_args, num_removes = utils.nested_list_to_array(
-            all_remove_args)
+            all_remove_args, dim3=2)
         update_args1, num_updates = utils.nested_list_to_array(
-            all_update_args1)
+            all_update_args1, dim3=2)
         update_args2, _ = utils.nested_list_to_array(
-            all_update_args2)
+            all_update_args2, dim3=2)
 
         feeds = {self.args_insert: insert_args, self.num_inserts: num_inserts,
                  self.args_remove: remove_args, self.num_removes: num_removes,

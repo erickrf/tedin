@@ -31,22 +31,21 @@ class Dataset(object):
     Class for storing data in the format used by TEDIN models.
     """
 
-    def __init__(self, pairs, nodes1, nodes2, sizes1, sizes2, labels=None):
+    def __init__(self, pairs, nodes1, nodes2, labels=None):
         """
         Create a Dataset
 
         :param pairs: list of Pair objects
-        :param nodes1: numpy array (num_pairs, max_len)
-        :param nodes2: numpy array (num_pairs, max_len)
-        :param sizes1: numpy array (num_pairs)
-        :param sizes2: numpy array (num_pairs)
-        :param labels: numpy array (num_pairs) or None
+        :param nodes1: numpy array (num_pairs, max_len, num_inds) where num_inds
+            is the number of indices to represent a node. Usually it is 2:
+            word embedding and dependency label embedding.
+        :param nodes2: numpy array (num_pairs, max_len, num_inds)
+        :param labels: numpy array (num_pairs) or None (this is the target
+            class)
         """
         self.pairs = pairs
         self.nodes1 = nodes1
         self.nodes2 = nodes2
-        self.sizes1 = sizes1
-        self.sizes2 = sizes2
         self.labels = labels
         self.last_batch_index = 0
         self.epoch = 1
@@ -80,8 +79,7 @@ class Dataset(object):
         self.num_items = len(self.nodes1)
 
         # variables in the order they are given in the constructor
-        self._ordered_variables = [self.pairs, self.nodes1, self.nodes2,
-                                   self.sizes1, self.sizes2]
+        self._ordered_variables = [self.pairs, self.nodes1, self.nodes2]
         if self.labels is not None:
             self._ordered_variables.append(self.labels)
 
@@ -99,8 +97,6 @@ class Dataset(object):
         self.pairs.extend(dataset.pairs)
         self.nodes1 = np.concatenate([self.nodes1, dataset.nodes1])
         self.nodes2 = np.concatenate([self.nodes2, dataset.nodes2])
-        self.sizes1 = np.concatenate([self.sizes1, dataset.sizes1])
-        self.sizes2 = np.concatenate([self.sizes2, dataset.sizes2])
         if self.labels is not None:
             self.labels = np.concatenate([self.labels, dataset.labels])
         self._post_assignments()

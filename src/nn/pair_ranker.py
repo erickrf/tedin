@@ -31,8 +31,9 @@ class PairRanker(object):
         # there is a TreeEditDistanceNetwork for each
         self.tedin1 = TreeEditDistanceNetwork(params, create_optimizer=False)
         self.session = self.tedin1.session
+        embedding_vars = [self.tedin1.embeddings, self.tedin1.label_embeddings]
         self.tedin2 = TreeEditDistanceNetwork(
-            params, self.session, self.tedin1.embeddings, reuse_weights=True,
+            params, self.session, embedding_vars, reuse_weights=True,
             create_optimizer=False)
         self.logger = self.tedin1.logger
 

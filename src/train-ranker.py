@@ -10,9 +10,9 @@ from __future__ import division, print_function, unicode_literals
 import argparse
 import logging
 
-from . import utils
-from . import nn
-from . import datastructures as ds
+from infernal import utils
+from infernal import nn
+from infernal import datastructures as ds
 
 
 def split_paraphrase_neutral(pairs):
@@ -30,18 +30,19 @@ def split_paraphrase_neutral(pairs):
     return paraphrases, neutrals
 
 
-def load_pairs(path, wd):
+def load_pairs(path, wd, label_dict):
     """
     Load a pickle file with pairs and do some necessary preprocessing.
 
     :param path: path to saved pairs
     :param wd: word dictionary
+    :param label_dict: label dictionary
     :return: tuple of ds.Datasets (positive, negative)
     """
     pairs = utils.read_pairs(path)
     pos_pairs, neg_pairs = split_paraphrase_neutral(pairs)
-    pos_data = nn.create_tedin_dataset(pos_pairs, wd)
-    neg_data = nn.create_tedin_dataset(neg_pairs, wd)
+    pos_data = nn.create_tedin_dataset(pos_pairs, wd, label_dict)
+    neg_data = nn.create_tedin_dataset(neg_pairs, wd, label_dict)
 
     msg = '%d positive and %d negative pairs' % (len(pos_data), len(neg_data))
     logging.info(msg)
@@ -55,9 +56,12 @@ if __name__ == '__main__':
     parser.add_argument('valid', help='Validation pairs')
     parser.add_argument('embeddings', help='Numpy embeddings file (txt file '
                                            ' with vocabulary will be sought)')
+    parser.add_argument('label_dict', help='Dictionary with node labels')
     parser.add_argument('model', help='Directory to save model and logs')
     parser.add_argument('-l', help='Learning rate', type=float,
                         dest='learning_rate', default=0.01)
+    parser.add_argument('--le', help='Label embedding size', default=10,
+                        type=int, dest='label_embedding_size')
     parser.add_argument('-n', help='Hidden units', type=int, default=100,
                         dest='num_units')
     parser.add_argument('-d', help='Dropout keep', type=float, dest='dropout',
@@ -73,11 +77,14 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
     wd, embeddings = utils.load_embeddings(args.embeddings)
-    train_data = load_pairs(args.train, wd)
-    valid_data = load_pairs(args.valid, wd)
+    label_dict = utils.load_label_dict(args.label_dict)
+    train_data = load_pairs(args.train, wd, label_dict)
+    valid_data = load_pairs(args.valid, wd, label_dict)
 
+    label_emb_shape = [len(label_dict), args.label_embedding_size]
     params = nn.TedinParameters(args.learning_rate, args.dropout, args.batch,
-                                args.steps, args.num_units, embeddings.shape, 3)
+                                args.steps, args.num_units, embeddings.shape,
+                                label_emb_shape, 3)
 
     ranker = nn.PairRanker(params)
     ranker.initialize(embeddings)
