@@ -6,6 +6,7 @@ from __future__ import unicode_literals
 Utility functions
 '''
 
+import sys
 import re
 from six.moves import cPickle
 from xml.etree import cElementTree as ET
@@ -67,10 +68,19 @@ class EmbeddingDictionary(object):
         return self.embeddings[indices]
 
 
+def print_cli_args():
+    """
+    Log the command line arguments
+    :return:
+    """
+    args = ' '.join(sys.argv)
+    logging.info('The following command line arguments were given: %s' % args)
+
+
 def tokenize_sentence(text, change_quotes=True, change_digits=False):
     '''
-    Tokenize the given sentence in Portuguese. The tokenization is done in conformity
-    with Universal Treebanks (at least it attempts so).
+    Tokenize the given sentence in Portuguese. The tokenization is done in
+    conformity with Universal Treebanks (at least it attempts so).
 
     :param text: text to be tokenized, as a string
     :param change_quotes: if True, change different kinds of quotation marks to "

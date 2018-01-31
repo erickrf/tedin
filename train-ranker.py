@@ -75,6 +75,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
+    utils.print_cli_args()
 
     wd, embeddings = utils.load_embeddings(args.embeddings)
     label_dict = utils.load_label_dict(args.label_dict)
