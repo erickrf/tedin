@@ -38,14 +38,15 @@ class TedinParameters(tf.contrib.training.HParams):
         )
 
 
-def find_zss_operations(pair, insert_costs, remove_costs, update_cost_fn):
+def find_zss_operations(pair, insert_costs, remove_costs, update_costs):
     """
     Run the zhang-shasha algorithm and return the list of operations
 
     :param pair: an instance of Pair
     :param insert_costs: array with costs of inserting each node in sentence 2
     :param remove_costs: array with costs of removing each node in sentence 1
-    :param update_cost_fn: function (node1, node2) -> update cost
+    :param update_costs: array 2d with costs of replacing node i from sentence 1
+        with node j from sentence 2 in cell (i, j)
     :return:
     """
     def get_children(node):
@@ -57,13 +58,16 @@ def find_zss_operations(pair, insert_costs, remove_costs, update_cost_fn):
     def get_remove_cost(node):
         return remove_costs[node.id - 1]
 
+    def get_update_cost(node1, node2):
+        return update_costs[node1.id - 1, node2.id - 1]
+
     tree_t = pair.annotated_t
     tree_h = pair.annotated_h
     root_t = tree_t.root
     root_h = tree_h.root
 
     _, ops = zss.distance(root_t, root_h, get_children, get_insert_cost,
-                          get_remove_cost, update_cost_fn)
+                          get_remove_cost, get_update_cost)
     return ops
 
 
@@ -207,7 +211,6 @@ class TreeEditDistanceNetwork(object):
         # "label" here refers to the node labels, not the target class
         self.embeddings = word_embeddings
         self.label_embeddings = label_embeddings
-        self.update_cache = {}
 
         # control weights already initialized
         self.reuse_weights = reuse_weights
@@ -353,24 +356,33 @@ class TreeEditDistanceNetwork(object):
         self.nodes1 = tf.placeholder(tf.int32, [None, None, 2], 'nodes1')
         self.nodes2 = tf.placeholder(tf.int32, [None, None, 2], 'nodes2')
 
-        # single nodes are used for computing update costs for a node pair
-        # fake batch dimension is necessary even if we treat a single node
-        self.single_node1 = tf.placeholder(tf.int32, [None, 2], 'single_node1')
-        self.single_node2 = tf.placeholder(tf.int32, [None, 2], 'single_node2')
-
-        # "label" here is used in the sense of syntactic tree label
         embedded1 = self._embed_nodes(self.nodes1)
         embedded2 = self._embed_nodes(self.nodes2)
         self.remove_costs = self._compute_operation_cost('remove', embedded1)
         self.insert_costs = self._compute_operation_cost('insert', embedded2)
+        self._define_update_costs(embedded1, embedded2)
 
-        # computing all node1/node2 update combinations is too expensive and
-        # unnecessary. Instead, call it as needed with a pair of nodes.
-        self.update_cache = {}
-        single_embedded1 = self._embed_nodes(self.single_node1)
-        single_embedded2 = self._embed_nodes(self.single_node2)
-        self.update_cost = self._compute_operation_cost(
-            'update', single_embedded1, single_embedded2)
+    def _define_update_costs(self, embedded1, embedded2):
+        """
+        Define the tensors for computing update costs.
+
+        It computes all combinations of nodes in the first sentence with the
+        second one.
+
+        :param embedded1: tensor (batch, num_nodes1, embedded_size)
+        :param embedded2: tensor (batch, num_nodes2, embedded_size)
+        """
+        num_nodes1 = tf.shape(embedded1)[1]
+        num_nodes2 = tf.shape(embedded2)[1]
+
+        # we replicate embedded1 as many times as num_nodes2, and vice-versa
+        # both will have shape (batch, num_nodes1, num_nodes2, embedded_size)
+        nodes1_4d = tf.expand_dims(embedded1, 2)
+        nodes2_4d = tf.expand_dims(embedded2, 1)
+        tiled1 = tf.tile(nodes1_4d, [1, 1, num_nodes2, 1])
+        tiled2 = tf.tile(nodes2_4d, [1, num_nodes1, 1, 1])
+        self.update_costs = self._compute_operation_cost('update', tiled1,
+                                                         tiled2)
 
     def _embed_nodes(self, nodes):
         """
@@ -465,36 +477,12 @@ class TreeEditDistanceNetwork(object):
         :param batch: Dataset
         :return: dictionary of feeds with the operations and their arguments
         """
-        def run_update_cost(node1, node2):
-            """
-            Compute the update cost for a single node substitution
-
-            :param node1: Token object
-            :param node2: Token object
-            :return: int
-            """
-            # take the embedding index of each word
-            id1 = node1.index
-            id2 = node2.index
-            label1 = node1.dep_index
-            label2 = node2.dep_index
-            key = (id1, label1, id2, label2)
-            if key in self.update_cache:
-                return self.update_cache[key]
-
-            feeds = {self.single_node1: [[id1, label1]],
-                     self.single_node2: [[id2, label2]]}
-            cost = self.update_cost.eval(feeds, session=self.session)[0]
-            self.update_cache[key] = cost
-
-            return cost
-
         # precompute the insert and remove costs
         feeds = {self.nodes1: batch.nodes1, self.nodes2: batch.nodes2}
-        insert_costs, remove_costs = self.session.run([self.insert_costs,
-                                                       self.remove_costs],
-                                                      feeds)
-        self.update_cache = {}
+
+        cost_ops = [self.insert_costs, self.remove_costs, self.update_costs]
+        costs = self.session.run(cost_ops, feeds)
+        insert_costs, remove_costs, update_costs = costs
 
         all_insert_args = []
         all_remove_args = []
@@ -502,7 +490,7 @@ class TreeEditDistanceNetwork(object):
         all_update_args2 = []
         for i, item in enumerate(batch):
             operations = find_zss_operations(
-                item.pairs, insert_costs[i], remove_costs[i], run_update_cost)
+                item.pairs, insert_costs[i], remove_costs[i], update_costs[i])
 
             inserts = []
             removes = []
