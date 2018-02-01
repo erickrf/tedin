@@ -320,7 +320,8 @@ def extract_similarities(pairs):
     return z
 
 
-def read_pairs(path, add_inverted=False, paraphrase_to_entailment=False):
+def read_pickled_pairs(path, add_inverted=False,
+                       paraphrase_to_entailment=False):
     '''
     Load pickled pairs from the given path.
 
@@ -401,6 +402,62 @@ def read_vocabulary(path):
     return word_dict
 
 
+def read_pairs(filename):
+    '''
+    Read the pairs from the given file.
+
+    :param filename: either a TSV or an XML file
+    :return: list of pairs
+    '''
+    lower_filename = filename.lower()
+    if lower_filename.endswith('.tsv'):
+        return read_tsv(filename)
+    elif lower_filename.endswith('.xml'):
+        return read_xml(filename)
+    else:
+        msg = 'Unrecognized file extension (expecting .tsv or .xml): %s'
+        msg %= filename
+        raise ValueError(msg)
+
+
+def read_tsv(filename):
+    '''
+    Read a TSV file with the format, as used in the SICK corpus.
+
+    sentence1 [TAB] sentence2 [TAB] label [TAB] similarity
+
+    :param filename: path to a tsv file
+    :return: list of pairs
+    '''
+    pairs = []
+    with open(filename, 'r') as f:
+        for line in f:
+            sent1, sent2, label, similarity = line.split('\t')
+            entailment = map_entailment_string(label)
+            similarity = float(similarity)
+            pair = ds.Pair(sent1, sent2, None, entailment, similarity)
+            pairs.append(pair)
+
+    return pairs
+
+
+def map_entailment_string(ent_string):
+    """
+    Map an entailment string (written in a corpus file) to an Entailment enum
+    object
+    """
+    ent_string = ent_string.lower()
+    if ent_string in ['yes', 'entailment']:
+        entailment = ds.Entailment.entailment
+    elif ent_string == 'paraphrase':
+        entailment = ds.Entailment.paraphrase
+    elif ent_string == 'contradiction':
+        entailment = ds.Entailment.contradiction
+    else:
+        entailment = ds.Entailment.none
+    return entailment
+
+
 def read_xml(filename):
     '''
     Read an RTE XML file and return a list of Pair objects.
@@ -417,15 +474,7 @@ def read_xml(filename):
         # the entailment relation is expressed differently in some versions
         if 'entailment' in attribs:
             ent_string = attribs['entailment'].lower()
-            
-            if ent_string in ['yes', 'entailment']:
-                entailment = ds.Entailment.entailment
-            elif ent_string == 'paraphrase':
-                entailment = ds.Entailment.paraphrase
-            elif ent_string == 'contradiction':
-                entailment = ds.Entailment.contradiction
-            else:
-                entailment = ds.Entailment.none
+            entailment = map_entailment_string(ent_string)
                         
         elif 'value' in attribs:
             if attribs['value'].lower() == 'true':

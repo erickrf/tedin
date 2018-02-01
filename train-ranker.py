@@ -39,7 +39,7 @@ def load_pairs(path, wd, label_dict):
     :param label_dict: label dictionary
     :return: tuple of ds.Datasets (positive, negative)
     """
-    pairs = utils.read_pairs(path)
+    pairs = utils.read_pickled_pairs(path)
     pos_pairs, neg_pairs = split_paraphrase_neutral(pairs)
     pos_data = nn.create_tedin_dataset(pos_pairs, wd, label_dict)
     neg_data = nn.create_tedin_dataset(neg_pairs, wd, label_dict)
