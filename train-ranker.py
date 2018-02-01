@@ -15,19 +15,20 @@ from infernal import nn
 from infernal import datastructures as ds
 
 
-def split_paraphrase_neutral(pairs):
+def split_positive_negative(pairs):
     """
-    Split a list of pairs into two lists: one containing only paraphrases
-    and the other containing only neutral pairs.
+    Split a list of pairs into two lists: one containing only positive
+    and the other containing only negative pairs.
 
-    :return: tuple (paraphases, neutrals)
+    :return: tuple (positives, negatives)
     """
-    paraphrases = [pair for pair in pairs
-                   if pair.entailment == ds.Entailment.paraphrase]
+    positive = [pair for pair in pairs
+                if pair.entailment == ds.Entailment.entailment
+                or pair.entailment == ds.Entailment.paraphrase]
     neutrals = [pair for pair in pairs
                 if pair.entailment == ds.Entailment.none]
 
-    return paraphrases, neutrals
+    return positive, neutrals
 
 
 def load_pairs(path, wd, label_dict):
@@ -40,7 +41,7 @@ def load_pairs(path, wd, label_dict):
     :return: tuple of ds.Datasets (positive, negative)
     """
     pairs = utils.read_pickled_pairs(path)
-    pos_pairs, neg_pairs = split_paraphrase_neutral(pairs)
+    pos_pairs, neg_pairs = split_positive_negative(pairs)
     pos_data = nn.create_tedin_dataset(pos_pairs, wd, label_dict)
     neg_data = nn.create_tedin_dataset(neg_pairs, wd, label_dict)
 

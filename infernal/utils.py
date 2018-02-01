@@ -622,7 +622,17 @@ def load_embeddings(embeddings_path, normalize=True):
                                                       vocabulary_path)
 
     wd = {word: ind for ind, word in enumerate(wordlist)}
-    unk_index = wd['<unk>']
+    if '<unk>' in wd:
+        unk_index = wd['<unk>']
+    else:
+        unk_index = len(wd)
+        wd['<unk>'] = unk_index
+        mean = embeddings.mean()
+        std = embeddings.std()
+        shape = [1, embeddings.shape[1]]
+        unk_vector = np.random.normal(mean, std, shape)
+        embeddings = np.concatenate([embeddings, unk_vector])
+
     wd = defaultdict(lambda: unk_index, wd)
 
     logging.debug('Embeddings have shape {}'.format(embeddings.shape))

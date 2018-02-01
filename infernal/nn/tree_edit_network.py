@@ -9,8 +9,8 @@ The treee edit distance code was adapted from the Python module zss.
 import zss
 import numpy as np
 import tensorflow as tf
-import os
 
+from .base import TedinParameters, Trainable
 from ..datastructures import Dataset
 from .. import utils
 
@@ -19,23 +19,6 @@ INSERT = zss.Operation.insert
 REMOVE = zss.Operation.remove
 UPDATE = zss.Operation.update
 MATCH = zss.Operation.match
-
-
-class TedinParameters(tf.contrib.training.HParams):
-    """
-    Subclass of tf.contrib.training.HParams holding necessary paramters for
-    Tedin.
-    """
-    def __init__(self, learning_rate, dropout, batch_size, num_steps,
-                 num_units, embeddings_shape, label_embeddings_shape,
-                 num_classes, l2=0, gradient_clipping=None):
-        super(TedinParameters, self).__init__(
-            learning_rate=learning_rate, dropout=dropout, batch_size=batch_size,
-            l2=l2, gradient_clipping=gradient_clipping, num_steps=num_steps,
-            num_units=num_units, embeddings_shape=embeddings_shape,
-            label_embeddings_shape=label_embeddings_shape,
-            num_classes=num_classes
-        )
 
 
 def find_zss_operations(pair, insert_costs, remove_costs, update_costs):
@@ -156,7 +139,7 @@ def create_tedin_dataset(pairs, wd, label_dict, lower=True):
     return dataset
 
 
-class TreeEditDistanceNetwork(object):
+class TreeEditDistanceNetwork(Trainable):
     """
     Model that learns weights for different tree edit operations.
     """
@@ -217,6 +200,11 @@ class TreeEditDistanceNetwork(object):
         self._initialized_weights = set()
         self._define_operation_costs()
         self._define_computation_graph(create_optimizer)
+
+    def _create_base_training_feeds(self, params):
+        feeds = {self.learning_rate: params.learning_rate,
+                 self.dropout_keep: params.dropout}
+        return feeds
 
     def _define_transformation_cost(self):
         """
@@ -470,7 +458,7 @@ class TreeEditDistanceNetwork(object):
 
         return hidden
 
-    def create_operation_feeds(self, batch):
+    def _create_data_feeds(self, batch):
         """
         Run the zhang-shasha algorithm to find the sequence of edit operations.
 
@@ -526,6 +514,9 @@ class TreeEditDistanceNetwork(object):
                  self.args1_update: update_args1, self.num_updates: num_updates,
                  self.args2_update: update_args2}
 
+        if batch.labels is not None:
+            feeds[self.labels] = batch.labels
+
         return feeds
 
     def initialize(self, embeddings):
@@ -540,56 +531,16 @@ class TreeEditDistanceNetwork(object):
         self.session.run([tf.global_variables_initializer(),
                           tf.local_variables_initializer()], feed)
 
-    def train(self, train_data, valid_data, params, model_dir, report_interval):
-        """
-        Train the network
+    def _get_next_batch(self, data, batch_size, training):
+        return data.next_batch(batch_size, wrap=training)
 
-        :param train_data: Dataset
-        :type train_data: Dataset
-        :param valid_data: Dataset
-        :type valid_data: Dataset
-        :param params: TedinParameters
-        :type params: TedinParameters
-        :param report_interval: number of steps between validation run and
-            performance reports
-        :param model_dir: path to save the trained model
-        :return:
-        """
-        best_acc = 0
-        accumulated_training_loss = 0
-        loss_denominator = params.batch_size * report_interval
-        train_params_feeds = {self.learning_rate: params.learning_rate,
-                              self.dropout_keep: params.dropout}
+    @property
+    def train_fetches(self):
+        return [self.loss, self.update_acc_op, self.train_op]
 
-        saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=5)
-        filename = os.path.join(model_dir, self.filename)
-
-        self.logger.info('Starting training')
-        # count steps from 1 to make it easier to treat `report_interval`
-        for step in range(1, params.num_steps):
-            batch = train_data.next_batch(params.batch_size, wrap=True)
-            train_params_feeds.update({self.labels: batch.labels})
-
-            ops = [self.loss, self.update_acc_op, self.train_op]
-            loss, _, _ = self._run(batch, ops, train_params_feeds)
-            accumulated_training_loss += loss
-
-            if step % report_interval == 0:
-                train_acc = self.session.run(self.moving_acc)
-                train_loss = accumulated_training_loss / loss_denominator
-                accumulated_training_loss = 0
-                self._reset_metrics()
-
-                valid_acc, valid_loss = self.run_validation(valid_data)
-                msg = '{} epochs\t{} steps\tTrain acc: {:.5}\t' \
-                      'Train loss: {:.5}\tValid acc: {:.5}\tValid loss: {:.5}'
-                if valid_acc > best_acc:
-                    saver.save(self.session, filename, step)
-                    best_acc = valid_acc
-                    msg += ' (saved model)'
-
-                self.logger.info(msg.format(train_data.epoch, step, train_acc,
-                                            train_loss, valid_acc, valid_loss))
+    @property
+    def validation_fetches(self):
+        return [self.accuracy, self.loss]
 
     def _reset_metrics(self):
         """
@@ -599,49 +550,45 @@ class TreeEditDistanceNetwork(object):
                        if 'accuracy' in v.name]
         self.session.run(tf.variables_initializer(metric_vars))
 
-    def _run(self, data, fetches, extra_feeds):
-        """
-        Run the model for the given data.
+    def _init_train_stats(self, params, report_interval):
+        self._best_acc = 0
+        self._accumulated_training_loss = 0
+        self._loss_denominator = params.batch_size * report_interval
 
-        It computes operation costs, runs zhang-shasha in python to get the
-        operation sequence, and the run the convolution over the operations.
-
-        :param data: dataset
-        :param extra_feeds: any extra feed data to the model
-        :return: the evaluated fetches
-        """
-        op_feeds = self.create_operation_feeds(data)
-        op_feeds.update(extra_feeds)
-
-        return self.session.run(fetches, op_feeds)
-
-    def run_validation(self, data, batch_size=None):
-        """
-        Run the model on validation data and return the accuracy and loss.
-
-        :param data: Dataset
-        :param batch_size: None or integer. If None, the whole dataset will be
-            evaluated at once, which may not fit memory.
-        :return: tuple (accuracy, loss) as python floats
-        """
-        if batch_size is None:
-            batch_size = len(data)
-
-        accumulated_loss = 0
-        accumulated_acc = 0
-        num_batches = int(len(data) / batch_size)
+    def _init_validation(self, data):
+        self._accumulated_validation_loss = 0
+        self._accumulated_validation_acc = 0
         data.reset_batch_counter()
-        for _ in range(num_batches):
-            batch = data.next_batch(batch_size, wrap=False)
-            acc, loss = self._run(batch, [self.accuracy, self.loss],
-                                  {self.labels: batch.labels})
 
-            # multiply by len(batch) because the last batch may have a different
-            # length
-            accumulated_acc += acc * len(batch)
-            accumulated_loss += loss * len(batch)
+    def _update_training_stats(self, values, data):
+        loss, _, _ = values
+        self._accumulated_training_loss += loss
 
-        acc = accumulated_acc / len(data)
-        loss = accumulated_loss / len(data)
+    def _update_validation_stats(self, values, data):
+        acc, loss = values
+        self._accumulated_validation_loss += loss * len(data)
+        self._accumulated_validation_acc += acc * len(data)
 
+    def _get_validation_metrics(self, data):
+        acc = self._accumulated_validation_acc / len(data)
+        loss = self._accumulated_validation_loss / len(data)
         return acc, loss
+
+    def _validation_report(self, values, saver, step, train_data):
+        valid_acc, valid_loss = values
+
+        train_acc = self.session.run(self.moving_acc)
+        train_loss = self._accumulated_training_loss / self._loss_denominator
+        self._accumulated_training_loss = 0
+        self._reset_metrics()
+
+        msg = '{} epochs\t{} steps\tTrain acc: {:.5}\t' \
+              'Train loss: {:.5}\tValid acc: {:.5}\tValid loss: {:.5}'
+
+        if valid_acc > self._best_acc:
+            saver.save(self.session, self.path, step)
+            self._best_acc = valid_acc
+            msg += ' (saved model)'
+
+        self.logger.info(msg.format(train_data.epoch, step, train_acc,
+                                    train_loss, valid_acc, valid_loss))

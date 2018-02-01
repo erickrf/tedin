@@ -2,14 +2,13 @@
 
 from __future__ import division, print_function, unicode_literals
 
-import os
 import tensorflow as tf
 
 from .tree_edit_network import TreeEditDistanceNetwork
-from ..datastructures import Dataset
+from .base import Trainable
 
 
-class PairRanker(object):
+class PairRanker(Trainable):
     """
     Class that learns parameters for tree edit distance comparison by training
     on pairs of unrelated and related trees.
@@ -50,107 +49,70 @@ class PairRanker(object):
         optimizer = tf.train.AdagradOptimizer(self.learning_rate)
         self.train_op = optimizer.minimize(self.loss)
 
-    def _run(self, extra_feeds, fetches, batch_positive, batch_negative):
-        """
-        Run the model with the given fetches for a batch.
-
-        :param extra_feeds: dictionary with training hyperparams, if needed
-        :param fetches: op or ops to fetch
-        :param batch_positive: Dataset object with "positive" sentence pairs
-        :param batch_negative: Dataset object with "negative" sentence pairs
-        :return: the computed fetches
-        """
-        operation_feed1 = self.tedin1.create_operation_feeds(batch_positive)
-        operation_feed2 = self.tedin2.create_operation_feeds(batch_negative)
-
-        # update modifies the dictionary in-place, but this is not a problem
-        # it will be modified again for the next batch
-        extra_feeds.update(operation_feed1)
-        extra_feeds.update(operation_feed2)
-
-        return self.session.run(fetches, extra_feeds)
-
-    def run_validation(self, data, batch_size=None):
-        """
-        Run the model on validation data and return the loss.
-
-        :param data: tuple (positive, negative) of Datasets
-        :param batch_size: None or integer. If None, the whole dataset will be
-            evaluated at once, which may not fit memory.
-        :return: tuple (accuracy, loss) as python floats
-        """
-        positive_data, negative_data = data
-        min_size = min(len(positive_data), len(negative_data))
-        if batch_size is None:
-            batch_size = min_size
-
-        positive_data.reset_batch_counter()
-        negative_data.reset_batch_counter()
-
-        accumulated_loss = 0
-        num_batches = int(min_size / batch_size)
-
-        for _ in range(num_batches):
-            pos_batch = positive_data.next_batch(batch_size, wrap=False)
-            neg_batch = negative_data.next_batch(batch_size, wrap=False)
-            loss = self._run({}, self.loss, pos_batch, neg_batch)
-
-            # multiply by len(batch) because the last batch may have a different
-            # length
-            accumulated_loss += loss * len(pos_batch)
-
-        loss = accumulated_loss / min_size
-
-        return loss
-
-    def train(self, train_data, valid_data, params, model_dir, report_interval):
-        """
-        Train the model
-
-        :param train_data: tuple of Datasets (positive, negative)
-        :param valid_data: tuple of Datasets (positive, negative)
-        :param params: TedinParameters
-        :param model_dir: path to the model dir
-        :param report_interval:
-        :return:
-        """
-        best_loss = 1e10
-        accumulated_train_loss = 0
-        loss_denominator = params.batch_size * report_interval
-
-        path = os.path.join(model_dir, self.filename)
-        saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=5)
-
+    def _create_base_training_feeds(self, params):
         feeds = {self.learning_rate: params.learning_rate,
                  self.dropout_keep: params.dropout}
-        positive_data, negative_data = train_data
+        return feeds
 
-        self.logger.info('Starting training')
-        for step in range(params.num_steps):
-            # TODO: avoid some repeated code with TEDIN
-            pos_batch = positive_data.next_batch(params.batch_size, wrap=True,
-                                                 shuffle=True)
-            neg_batch = negative_data.next_batch(params.batch_size, wrap=True,
-                                                 shuffle=True)
+    def _get_next_batch(self, data, batch_size, training):
+        pos_data, neg_data = data
+        pos_batch = pos_data.next_batch(batch_size, wrap=training,
+                                        shuffle=training)
+        neg_batch = neg_data.next_batch(batch_size, wrap=training,
+                                        shuffle=training)
+        return pos_batch, neg_batch
 
-            fetches = [self.loss, self.train_op]
-            loss, _ = self._run(feeds, fetches, pos_batch, neg_batch)
-            accumulated_train_loss += loss
+    def _create_data_feeds(self, data):
+        pos_data, neg_data = data
+        feeds1 = self.tedin1._create_data_feeds(pos_data)
+        feeds2 = self.tedin2._create_data_feeds(neg_data)
+        feeds1.update(feeds2)
 
-            if step % report_interval == 0:
-                train_loss = accumulated_train_loss / loss_denominator
-                accumulated_train_loss = 0
-                msg = '{}/{} positive/negative epochs\t{} steps\t' \
-                      'Train loss: {:.5}\tValid loss: {:.5}'
-                valid_loss = self.run_validation(valid_data)
-                if valid_loss < best_loss:
-                    best_loss = valid_loss
-                    saver.save(self.session, path, step)
-                    msg += ' (saved model)'
+        return feeds1
 
-                self.logger.info(msg.format(
-                    positive_data.epoch, negative_data.epoch, step,
-                    train_loss, valid_loss))
+    def _init_train_stats(self, params, report_interval):
+        self._best_loss = 1e10
+        self._accumulated_training_loss = 0
+        self._loss_denominator = params.batch_size * report_interval
+
+    def _init_validation(self, data):
+        self._accumulated_validation_loss = 0
+        data[0].reset_batch_counter()
+        data[1].reset_batch_counter()
+
+    def _update_training_stats(self, values, data):
+        loss, _ = values
+        self._accumulated_training_loss += loss
+
+    def _update_validation_stats(self, values, data):
+        loss = values[0]
+        pos_data, neg_data = data
+        self._accumulated_validation_loss += loss * len(pos_data)
+
+    def _get_validation_metrics(self, data):
+        return self._accumulated_validation_loss / self._get_data_size(data)
+
+    def _get_data_size(self, data):
+        pos_data, neg_data = data
+        return min(len(pos_data), len(neg_data))
+
+    def _validation_report(self, values, saver, step, train_data):
+        valid_loss = values
+        train_loss = self._accumulated_training_loss / self._loss_denominator
+        self._accumulated_training_loss = 0
+
+        msg = '{}/{} positive/negative epochs\t{} steps\t' \
+              'Train loss: {:.5}\tValid loss: {:.5}'
+
+        if valid_loss < self._best_loss:
+            saver.save(self.session, self.path, step)
+            self._best_loss = valid_loss
+            msg += ' (saved model)'
+
+        pos_epoch = train_data[0].epoch
+        neg_epoch = train_data[1].epoch
+        self.logger.info(msg.format(pos_epoch, neg_epoch, step, train_loss,
+                                    valid_loss))
 
     def initialize(self, embeddings):
         """
