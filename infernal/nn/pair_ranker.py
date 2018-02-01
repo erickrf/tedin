@@ -73,7 +73,7 @@ class PairRanker(Trainable):
     def _init_train_stats(self, params, report_interval):
         self._best_loss = 1e10
         self._accumulated_training_loss = 0
-        self._loss_denominator = params.batch_size * report_interval
+        self._loss_denominator = report_interval
 
     def _init_validation(self, data):
         self._accumulated_validation_loss = 0

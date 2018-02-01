@@ -186,7 +186,7 @@ class Trainable(object):
         feeds = self._create_base_training_feeds(params)
 
         self.logger.info('Starting training')
-        for step in range(1, params.num_steps):
+        for step in range(1, params.num_steps + 1):
             batch = self._get_next_batch(train_data, params.batch_size,
                                          training=True)
             fetches = self.train_fetches
