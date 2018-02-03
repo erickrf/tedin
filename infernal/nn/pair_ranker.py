@@ -13,7 +13,7 @@ class PairRanker(Trainable):
     Class that learns parameters for tree edit distance comparison by training
     on pairs of unrelated and related trees.
     """
-    filename = 'pair-ranker'
+    filename = 'tedin'
 
     def __init__(self, params):
         """
@@ -21,6 +21,8 @@ class PairRanker(Trainable):
 
         :param params: TedinParameters for the contained TEDIN
         """
+        self.params = params
+
         # training params
         self.learning_rate = tf.placeholder(tf.float32, None, 'learning_rate')
         self.dropout_keep = tf.placeholder_with_default(1., None,
@@ -30,9 +32,8 @@ class PairRanker(Trainable):
         # there is a TreeEditDistanceNetwork for each
         self.tedin1 = TreeEditDistanceNetwork(params, create_optimizer=False)
         self.session = self.tedin1.session
-        embedding_vars = [self.tedin1.embeddings, self.tedin1.label_embeddings]
         self.tedin2 = TreeEditDistanceNetwork(
-            params, self.session, embedding_vars, reuse_weights=True,
+            params, self.session, self.tedin1.embeddings, reuse_weights=True,
             create_optimizer=False)
         self.logger = self.tedin1.logger
 
@@ -41,8 +42,9 @@ class PairRanker(Trainable):
         distances1 = self.tedin1.transformation_cost
         distances2 = self.tedin2.transformation_cost
 
-        # the loss is given as max(0, 1 - (distance1 - distance2))
-        diff = distances1 - distances2
+        # the loss is given as max(0, 1 - (distance2 - distance1))
+        # i.e. negative pairs should have a higher distance than positive ones
+        diff = distances2 - distances1
         loss = tf.maximum(0., 1 - diff)
         self.loss = tf.reduce_mean(loss)
 
@@ -96,7 +98,7 @@ class PairRanker(Trainable):
         pos_data, neg_data = data
         return min(len(pos_data), len(neg_data))
 
-    def _validation_report(self, values, saver, step, train_data):
+    def _validation_report(self, values, saver, step, train_data, model_dir):
         valid_loss = values
         train_loss = self._accumulated_training_loss / self._loss_denominator
         self._accumulated_training_loss = 0
@@ -105,7 +107,8 @@ class PairRanker(Trainable):
               'Train loss: {:.5}\tValid loss: {:.5}'
 
         if valid_loss < self._best_loss:
-            saver.save(self.session, self.path, step)
+            path = self.tedin1.get_base_file_name(model_dir)
+            saver.save(self.session, path)
             self._best_loss = valid_loss
             msg += ' (saved model)'
 

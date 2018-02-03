@@ -592,6 +592,7 @@ def load_binary_embeddings(embeddings_path, vocabulary_path):
 def normalize_embeddings(embeddings):
     """
     Normalize the embeddings to have norm 1.
+
     :param embeddings: 2-d numpy array
     :return: normalized embeddings
     """

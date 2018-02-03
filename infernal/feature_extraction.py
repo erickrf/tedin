@@ -14,10 +14,10 @@ import numpy as np
 from scipy.spatial.distance import cdist
 import zss
 
-import numerals
-import datastructures
-import config
-import openwordnetpt as own
+from . import numerals
+from . import datastructures
+from . import config
+from . import openwordnetpt as own
 
 
 def word_overlap_proportion(pair, stopwords=None):

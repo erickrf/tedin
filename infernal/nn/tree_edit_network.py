@@ -21,6 +21,10 @@ UPDATE = zss.Operation.update
 MATCH = zss.Operation.match
 
 
+def get_variable_by_name(name):
+    return [v for v in tf.global_variables() if v.name == name][0]
+
+
 def find_zss_operations(pair, insert_costs, remove_costs, update_costs):
     """
     Run the zhang-shasha algorithm and return the list of operations
@@ -42,6 +46,8 @@ def find_zss_operations(pair, insert_costs, remove_costs, update_costs):
         return remove_costs[node.id - 1]
 
     def get_update_cost(node1, node2):
+        if node1.id == node2.id and node1.dep_index == node2.dep_index:
+            return 0
         return update_costs[node1.id - 1, node2.id - 1]
 
     tree_t = pair.annotated_t
@@ -49,9 +55,10 @@ def find_zss_operations(pair, insert_costs, remove_costs, update_costs):
     root_t = tree_t.root
     root_h = tree_h.root
 
-    _, ops = zss.distance(root_t, root_h, get_children, get_insert_cost,
-                          get_remove_cost, get_update_cost)
-    return ops
+    cost, ops = zss.distance(root_t, root_h, get_children, get_insert_cost,
+                             get_remove_cost, get_update_cost,
+                             return_operations=True)
+    return cost, ops
 
 
 def mask_2d(inputs, lengths, mask_value):
@@ -145,7 +152,7 @@ class TreeEditDistanceNetwork(Trainable):
     """
     filename = 'tedin'
 
-    def __init__(self, params, session=None, embeddings_variables=None,
+    def __init__(self, params, session=None, word_embeddings_var=None,
                  reuse_weights=False, create_optimizer=True):
         """
         :param params: TedinParameters
@@ -153,7 +160,9 @@ class TreeEditDistanceNetwork(Trainable):
         :param session: tensorflow session or None. If None, a new session is
             created, otherwise the supplied one is used.
         :param reuse_weights: if True, all weights will be reused.
-        :param embeddings_variables: list of tensorflow variables or None.
+        :param word_embeddings_var: tensorflow variable or None.
+            This should NOT be a numpy array with the embeddings; they are
+            provided to the initialize method.
             It should be used when sharing the embeddings with another model.
         :param create_optimizer: if True, create an optimizer for the labeled
             problem. It should be false when using two instances in tandem for
@@ -163,6 +172,7 @@ class TreeEditDistanceNetwork(Trainable):
             session = tf.Session()
 
         self.session = session
+        self.params = params
         self.num_hidden_units = params.num_units
         self.num_classes = params.num_classes
         self.logger = utils.get_logger(self.__class__.__name__)
@@ -178,28 +188,48 @@ class TreeEditDistanceNetwork(Trainable):
         # operations applied to a sentence pair (batch, max_num_ops)
         self.operations = tf.placeholder(tf.int32, [None, None], 'operations')
 
-        if embeddings_variables is None:
+        if word_embeddings_var is None:
             self.embedding_ph = tf.placeholder(
                 tf.float32, params.embeddings_shape, 'word_embeddings_ph')
-            word_embeddings = tf.Variable(
+            self.embeddings = tf.Variable(
                 self.embedding_ph, trainable=False, validate_shape=True,
-                name='embeddings')
-            with tf.variable_scope('attribute-embedding', reuse=reuse_weights):
-                label_embeddings = tf.get_variable(
-                    'dependency_embeddings', params.label_embeddings_shape,
-                    tf.float32, tf.random_normal_initializer(0, 0.1))
+                name='word_embeddings')
         else:
-            word_embeddings, label_embeddings = embeddings_variables
+            self.embeddings = word_embeddings_var
 
-        # "label" here refers to the node labels, not the target class
-        self.embeddings = word_embeddings
-        self.label_embeddings = label_embeddings
+        with tf.variable_scope('attribute-embedding', reuse=reuse_weights):
+            # "label" here refers to the node labels, not the target class
+            self.label_embeddings = tf.get_variable(
+                'dependency_embeddings', params.label_embeddings_shape,
+                tf.float32, tf.random_normal_initializer(0, 0.1))
 
         # control weights already initialized
         self.reuse_weights = reuse_weights
         self._initialized_weights = set()
         self._define_operation_costs()
         self._define_computation_graph(create_optimizer)
+
+    @classmethod
+    def load(cls, path, embeddings, session=None):
+        """
+        Load a saved model
+
+        :param path: directory with saved model
+        :param embeddings: numpy embedding matrix
+        :param session: existing tensorflow session to be reuse, or None to
+            create a new one
+        :return: TEDIN instance
+        """
+        if session is None:
+            session = tf.Session()
+
+        params = cls.load_params(path)
+        tedin = TreeEditDistanceNetwork(params, session)
+        saver = tf.train.Saver(tf.trainable_variables())
+        saver.restore(session, cls.get_base_file_name(path))
+        session.run(tf.variables_initializer([tedin.embeddings]),
+                    {tedin.embedding_ph: embeddings})
+        return tedin
 
     def _create_base_training_feeds(self, params):
         feeds = {self.learning_rate: params.learning_rate,
@@ -217,7 +247,7 @@ class TreeEditDistanceNetwork(Trainable):
             Sum the costs of the real (non-padding) operations
             """
             # padded_costs is (batch, num_operations)
-            padded_costs = self._compute_operation_cost(scope, args1, args2)
+            padded_costs = self._define_operation_cost(scope, args1, args2)
 
             # mask to zero the values of padding operations
             real_costs = mask_2d(padded_costs, length, 0)
@@ -346,8 +376,8 @@ class TreeEditDistanceNetwork(Trainable):
 
         embedded1 = self._embed_nodes(self.nodes1)
         embedded2 = self._embed_nodes(self.nodes2)
-        self.remove_costs = self._compute_operation_cost('remove', embedded1)
-        self.insert_costs = self._compute_operation_cost('insert', embedded2)
+        self.remove_costs = self._define_operation_cost('remove', embedded1)
+        self.insert_costs = self._define_operation_cost('insert', embedded2)
         self._define_update_costs(embedded1, embedded2)
 
     def _define_update_costs(self, embedded1, embedded2):
@@ -369,8 +399,8 @@ class TreeEditDistanceNetwork(Trainable):
         nodes2_4d = tf.expand_dims(embedded2, 1)
         tiled1 = tf.tile(nodes1_4d, [1, 1, num_nodes2, 1])
         tiled2 = tf.tile(nodes2_4d, [1, num_nodes1, 1, 1])
-        self.update_costs = self._compute_operation_cost('update', tiled1,
-                                                         tiled2)
+        self.update_costs = self._define_operation_cost('update', tiled1,
+                                                        tiled2)
 
     def _embed_nodes(self, nodes):
         """
@@ -394,7 +424,7 @@ class TreeEditDistanceNetwork(Trainable):
                              'node_embedding')
         return embedded
 
-    def _compute_operation_cost(self, scope, node1, node2=None):
+    def _define_operation_cost(self, scope, node1, node2=None):
         """
         Apply a two-layer transformation to the input nodes yielding an
         operation cost.
@@ -458,12 +488,16 @@ class TreeEditDistanceNetwork(Trainable):
 
         return hidden
 
-    def _create_data_feeds(self, batch):
+    def run_zss(self, batch, return_costs=False):
         """
-        Run the zhang-shasha algorithm to find the sequence of edit operations.
+        Run the zhang-shasha algorithm with TEDIN's weights.
 
         :param batch: Dataset
-        :return: dictionary of feeds with the operations and their arguments
+        :param return_costs: if True, each item in the returned list contains a
+            tuple (cost, operations)
+        :return: if return_costs is True, a list of tuples
+            (cost, transformations); otherwise or a list of transformations.
+            Each transformation is a list of zss.Operation
         """
         # precompute the insert and remove costs
         feeds = {self.nodes1: batch.nodes1, self.nodes2: batch.nodes2}
@@ -472,19 +506,37 @@ class TreeEditDistanceNetwork(Trainable):
         costs = self.session.run(cost_ops, feeds)
         insert_costs, remove_costs, update_costs = costs
 
-        all_insert_args = []
-        all_remove_args = []
-        all_update_args1 = []
-        all_update_args2 = []
+        all_operations = []
         for i, item in enumerate(batch):
-            operations = find_zss_operations(
+            cost, operations = find_zss_operations(
                 item.pairs, insert_costs[i], remove_costs[i], update_costs[i])
 
+            if return_costs:
+                all_operations.append((cost, operations))
+            else:
+                all_operations.append(operations)
+
+        return all_operations
+
+    def create_feeds_from_operations(self, operations):
+        """
+        Create a feed dictionary from a list of operations
+
+        :param operations: list of lists of operations (batch, num_operations)
+        :return: dictionary
+        """
+        all_inserts = []
+        all_removes = []
+        all_updates1 = []
+        all_updates2 = []
+
+        for op_list in operations:
             inserts = []
             removes = []
             updates1 = []
             updates2 = []
-            for op in operations:
+
+            for op in op_list:
                 a1 = op.arg1
                 a2 = op.arg2
                 if op.type == INSERT:
@@ -495,29 +547,36 @@ class TreeEditDistanceNetwork(Trainable):
                     updates1.append([a1.index, a1.dep_index])
                     updates2.append([a2.index, a2.dep_index])
 
-            all_insert_args.append(inserts)
-            all_remove_args.append(removes)
-            all_update_args1.append(updates1)
-            all_update_args2.append(updates2)
+            all_inserts.append(inserts)
+            all_removes.append(removes)
+            all_updates1.append(updates1)
+            all_updates2.append(updates2)
 
         insert_args, num_inserts = utils.nested_list_to_array(
-            all_insert_args, dim3=2)
+            all_inserts, dim3=2)
         remove_args, num_removes = utils.nested_list_to_array(
-            all_remove_args, dim3=2)
+            all_removes, dim3=2)
         update_args1, num_updates = utils.nested_list_to_array(
-            all_update_args1, dim3=2)
+            all_updates1, dim3=2)
         update_args2, _ = utils.nested_list_to_array(
-            all_update_args2, dim3=2)
+            all_updates2, dim3=2)
 
         feeds = {self.args_insert: insert_args, self.num_inserts: num_inserts,
                  self.args_remove: remove_args, self.num_removes: num_removes,
                  self.args1_update: update_args1, self.num_updates: num_updates,
                  self.args2_update: update_args2}
 
-        if batch.labels is not None:
-            feeds[self.labels] = batch.labels
-
         return feeds
+
+    def _create_data_feeds(self, batch):
+        """
+        Run the zhang-shasha algorithm to find the sequence of edit operations.
+
+        :param batch: Dataset
+        :return: dictionary of feeds with the operations and their arguments
+        """
+        operations = self.run_zss(batch)
+        return self.create_feeds_from_operations(operations)
 
     def initialize(self, embeddings):
         """
@@ -574,7 +633,7 @@ class TreeEditDistanceNetwork(Trainable):
         loss = self._accumulated_validation_loss / len(data)
         return acc, loss
 
-    def _validation_report(self, values, saver, step, train_data):
+    def _validation_report(self, values, saver, step, train_data, model_dir):
         valid_acc, valid_loss = values
 
         train_acc = self.session.run(self.moving_acc)
@@ -586,7 +645,7 @@ class TreeEditDistanceNetwork(Trainable):
               'Train loss: {:.5}\tValid acc: {:.5}\tValid loss: {:.5}'
 
         if valid_acc > self._best_acc:
-            saver.save(self.session, self.path, step)
+            saver.save(self.session, self.path)
             self._best_acc = valid_acc
             msg += ' (saved model)'
 
