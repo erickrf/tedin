@@ -478,7 +478,9 @@ class TreeEditDistanceNetwork(Trainable):
         if node2 is None:
             inputs = node1
         else:
-            inputs = tf.concat([node1, node2], axis=-1)
+            # in case of update
+            diff = node1 - node2
+            inputs = tf.concat([node1, node2, diff], axis=-1)
 
         reuse = self.reuse_weights or (operation in self._initialized_weights)
         self._initialized_weights.add(operation)
