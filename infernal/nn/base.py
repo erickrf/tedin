@@ -226,5 +226,5 @@ class Trainable(object):
             self._update_training_stats(values, batch)
 
             if step % report_interval == 0:
-                self._run_validation(valid_data, None, saver, step,
+                self._run_validation(valid_data, 256, saver, step,
                                      train_data, model_dir)
