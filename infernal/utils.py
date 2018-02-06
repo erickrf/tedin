@@ -102,7 +102,7 @@ def assign_word_indices(pairs, wd, lower=True):
             token.index = get_index(token.text)
 
 
-def read_pickled_pairs(path, add_inverted=False,
+def load_pickled_pairs(path, add_inverted=False,
                        paraphrase_to_entailment=False):
     '''
     Load pickled pairs from the given path.

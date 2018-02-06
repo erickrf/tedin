@@ -40,7 +40,7 @@ def load_pairs(path):
     :param path: path to saved pairs in pickle format
     :return: tuple of ds.Datasets (positive, negative)
     """
-    pairs = utils.read_pickled_pairs(path)
+    pairs = utils.load_pickled_pairs(path)
     pos_pairs, neg_pairs = split_positive_negative(pairs)
     pos_data = nn.create_tedin_dataset(pos_pairs)
     neg_data = nn.create_tedin_dataset(neg_pairs)
@@ -61,8 +61,6 @@ def print_variables():
 
 
 def get_num_dep_labels(dataset):
-    assert isinstance(dataset, ds.Dataset)
-
     # shape of nodes is (num_items, num_nodes, 2)
     # last dim is [word_index, label_index]
     return dataset.nodes1[:, :, 1].max() + 1
