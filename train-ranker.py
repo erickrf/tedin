@@ -60,6 +60,14 @@ def print_variables():
         print(v.name, v.shape.as_list())
 
 
+def get_num_dep_labels(dataset):
+    assert isinstance(dataset, ds.Dataset)
+
+    # shape of nodes is (num_items, num_nodes, 2)
+    # last dim is [word_index, label_index]
+    return dataset.nodes1[:, :, 1].max() + 1
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('train', help='Training pairs')
@@ -88,11 +96,11 @@ if __name__ == '__main__':
     utils.print_cli_args()
 
     embeddings = np.load(args.embeddings)
-    label_dict = utils.load_label_dict(args.label_dict)
     train_data = load_pairs(args.train)
     valid_data = load_pairs(args.valid)
+    num_labels = get_num_dep_labels(train_data[0])
 
-    label_emb_shape = [len(label_dict), args.label_embedding_size]
+    label_emb_shape = [num_labels, args.label_embedding_size]
     params = nn.TedinParameters(args.learning_rate, args.dropout, args.batch,
                                 args.steps, args.num_units, embeddings.shape,
                                 label_emb_shape, 3, args.cost_regularizer)
