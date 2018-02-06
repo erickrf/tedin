@@ -349,8 +349,9 @@ def load_binary_embeddings(embeddings_path, vocabulary_path):
     vectors = np.load(embeddings_path)
 
     with open(vocabulary_path, 'rb') as f:
-        text = f.read().decode('utf-8', errors='ignore')
-    words = text.splitlines()
+        text = f.read()
+    words = [word.decode('utf-8', 'backslashreplace')
+             for word in text.splitlines()]
 
     return words, vectors
 
@@ -367,7 +368,7 @@ def normalize_embeddings(embeddings):
     return embeddings / norms
 
 
-def load_embeddings(embeddings_path, normalize=True):
+def load_embeddings_and_dict(embeddings_path, normalize=True):
     """
     Load and return an embedding model in either text format or
     numpy binary format. If the file extension is .txt, text format is
@@ -392,7 +393,7 @@ def load_embeddings(embeddings_path, normalize=True):
     if UNKNOWN in wd:
         unk_index = wd[UNKNOWN]
     else:
-        unk_index = len(wd)
+        unk_index = max(wd.values()) + 1
         wd[UNKNOWN] = unk_index
         mean = embeddings.mean()
         std = embeddings.std()
@@ -407,6 +408,26 @@ def load_embeddings(embeddings_path, normalize=True):
         embeddings = normalize_embeddings(embeddings)
 
     return wd, embeddings
+
+
+def load_embeddings(path, add_vectors=None):
+    """
+    Load an embedding model from the given path
+
+    :param path: path to a numpy file
+    :param add_vectors: number of vectors to add to the embedding matrix. They
+        will be generated randomly with mean and stdev from the others.
+    :return: numpy array
+    """
+    embeddings = np.load(path)
+    if add_vectors:
+        mean = embeddings.mean()
+        std = embeddings.std()
+        shape = [add_vectors, embeddings.shape[1]]
+        new_vectors = np.random.normal(mean, std, shape)
+        embeddings = np.concatenate([embeddings, new_vectors])
+
+    return embeddings
 
 
 def get_logger(name='logger'):

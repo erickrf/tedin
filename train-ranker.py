@@ -95,7 +95,9 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     utils.print_cli_args()
 
-    embeddings = np.load(args.embeddings)
+    # add a single OOV vector here
+    # TODO: use a more sensible way of generating embeddings for OOV words
+    embeddings = utils.load_embeddings(args.embeddings, 1)
     train_data = load_pairs(args.train)
     valid_data = load_pairs(args.valid)
     num_labels = get_num_dep_labels(train_data[0])

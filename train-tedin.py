@@ -34,7 +34,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
 
-    wd, embeddings = utils.load_embeddings(args.embeddings)
+    wd, embeddings = utils.load_embeddings_and_dict(args.embeddings)
 
     train_pairs = utils.read_pairs(args.train)
     valid_pairs = utils.read_pairs(args.valid)
