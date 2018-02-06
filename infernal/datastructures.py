@@ -215,7 +215,7 @@ class Sentence(object):
     '''
     Class to store a sentence with linguistic annotations.
     '''
-    def __init__(self, text, parser_output, word_dict, dep_dict):
+    def __init__(self, text, parser_output, word_dict, dep_dict, lower=False):
         '''
         Initialize a sentence from the output of one of the supported parsers. 
         It checks for the tokens themselves, pos tags, lemmas
@@ -225,10 +225,11 @@ class Sentence(object):
         :param parser_output: if None, an empty Sentence object is created.
         :param word_dict: dictionary mapping words to integers
         :param dep_dict: dictionary mapping dependency relations to integers
+        :param lower: whether to convert tokens to lower case
         '''
         self.tokens = []
         self.text = text
-        self._read_conll_output(parser_output, word_dict, dep_dict)
+        self._read_conll_output(parser_output, word_dict, dep_dict, lower)
 
     def __str__(self):
         return ' '.join(str(t) for t in self.tokens)
@@ -237,7 +238,7 @@ class Sentence(object):
         repr_str = str(self)
         return _compat_repr(repr_str)
     
-    def _read_conll_output(self, conll_output, word_dict, dep_dict):
+    def _read_conll_output(self, conll_output, word_dict, dep_dict, lower):
         '''
         Internal function to load data in conll dependency parse syntax.
         '''
@@ -251,6 +252,8 @@ class Sentence(object):
 
             id_ = int(fields[ConllPos.id])
             word = fields[ConllPos.word]
+            if lower:
+                word = word.lower()
             index = word_dict[word]
 
             head = int(fields[ConllPos.dep_head])

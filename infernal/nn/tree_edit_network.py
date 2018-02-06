@@ -98,21 +98,13 @@ def mask_3d(inputs, lengths, mask_value):
     return masked
 
 
-def create_tedin_dataset(pairs, wd, label_dict, lower=True):
+def create_tedin_dataset(pairs):
     """
     Create a Dataset object to feed a Tedin model.
 
     :param pairs: list of parsed Pair objects
-    :param wd: word dictionary mapping tokens to integers
-    :param label_dict: dictionary mapping syntactic labels to integers
-    :param lower: whether to lowercase tokens
     :return: Dataset
     """
-    def index(token):
-        if lower:
-            return wd[token.lower()]
-        return wd[token]
-
     nodes1 = []
     nodes2 = []
     labels = []
@@ -123,13 +115,9 @@ def create_tedin_dataset(pairs, wd, label_dict, lower=True):
         h_indices = []
 
         for token in t.tokens:
-            token.index = index(token.text)
-            token.dep_index = label_dict[token.dependency_relation]
             t_indices.append([token.index, token.dep_index])
 
         for token in h.tokens:
-            token.index = index(token.text)
-            token.dep_index = label_dict[token.dependency_relation]
             h_indices.append([token.index, token.dep_index])
 
         nodes1.append(t_indices)

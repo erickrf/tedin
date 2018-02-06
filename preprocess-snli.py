@@ -83,7 +83,7 @@ if __name__ == '__main__':
         sent2 = ds.Sentence(pair.h, parse2, wd, label_dict)
         pair.annotated_h = sent2
 
-        if i % 10000 == 0:
+        if i % 10000 == 0 or i == len(pairs) - 1:
             print('Read %d pairs' % i)
 
     pairs = [pair for pair in pairs if pair is not None]

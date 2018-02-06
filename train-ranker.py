@@ -9,6 +9,7 @@ from __future__ import division, print_function, unicode_literals
 
 import argparse
 import logging
+import numpy as np
 import tensorflow as tf
 
 from infernal import utils
@@ -32,19 +33,17 @@ def split_positive_negative(pairs):
     return positive, neutrals
 
 
-def load_pairs(path, wd, label_dict):
+def load_pairs(path):
     """
     Load a pickle file with pairs and do some necessary preprocessing.
 
     :param path: path to saved pairs in pickle format
-    :param wd: word dictionary
-    :param label_dict: label dictionary
     :return: tuple of ds.Datasets (positive, negative)
     """
     pairs = utils.read_pickled_pairs(path)
     pos_pairs, neg_pairs = split_positive_negative(pairs)
-    pos_data = nn.create_tedin_dataset(pos_pairs, wd, label_dict)
-    neg_data = nn.create_tedin_dataset(neg_pairs, wd, label_dict)
+    pos_data = nn.create_tedin_dataset(pos_pairs)
+    neg_data = nn.create_tedin_dataset(neg_pairs)
 
     msg = '%d positive and %d negative pairs' % (len(pos_data), len(neg_data))
     logging.info(msg)
@@ -65,9 +64,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('train', help='Training pairs')
     parser.add_argument('valid', help='Validation pairs')
-    parser.add_argument('embeddings', help='Numpy embeddings file (txt file '
-                                           ' with vocabulary will be sought)')
-    parser.add_argument('label_dict', help='Dictionary with node labels')
+    parser.add_argument('embeddings', help='Numpy embeddings file')
     parser.add_argument('model', help='Directory to save model and logs')
     parser.add_argument('-l', help='Learning rate', type=float,
                         dest='learning_rate', default=0.01)
@@ -90,10 +87,10 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     utils.print_cli_args()
 
-    wd, embeddings = utils.load_embeddings(args.embeddings)
+    embeddings = np.load(args.embeddings)
     label_dict = utils.load_label_dict(args.label_dict)
-    train_data = load_pairs(args.train, wd, label_dict)
-    valid_data = load_pairs(args.valid, wd, label_dict)
+    train_data = load_pairs(args.train)
+    valid_data = load_pairs(args.valid)
 
     label_emb_shape = [len(label_dict), args.label_embedding_size]
     params = nn.TedinParameters(args.learning_rate, args.dropout, args.batch,

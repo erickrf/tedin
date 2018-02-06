@@ -17,7 +17,7 @@ from infernal import external
 from infernal import datastructures as ds
 
 
-def preprocess_pairs(pairs):
+def preprocess_pairs(pairs, wd, label_dict, lower):
     """
     Preprocess the pairs in-place so we can extract features later on.
 
@@ -34,26 +34,35 @@ def preprocess_pairs(pairs):
         output_h = external.call_corenlp(pair.h)
 
         try:
-            pair.annotated_t = ds.Sentence(pair.t, output_t, 'conll')
-            pair.annotated_h = ds.Sentence(pair.h, output_h, 'conll')
+            sent1 = ds.Sentence(pair.t, output_t, wd, label_dict, lower)
+            sent2 = ds.Sentence(pair.h, output_h, wd, label_dict, lower)
         except ValueError as e:
             tb = traceback.format_exc()
             logging.error('Error reading parser output:', e)
             logging.error(tb)
+            raise
 
-        # pair.lexical_alignments = utils.find_lexical_alignments(pair)
-        # pair.ppdb_alignments = utils.find_ppdb_alignments(pair, max_length=5)
-        pairs[i] = pair
+        pair.annotated_t = sent1
+        pair.annotated_h = sent2
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('input', help='XML or TSV file with pairs')
+    parser.add_argument('vocabulary', help='Vocabulary file (corresponding to '
+                                           'an embedding matrix)')
+    parser.add_argument('label_dict', help='Dictionary of dependency labels in '
+                                           'json format')
+    parser.add_argument('--lower', action='store_true',
+                        help='Lowercase tokens before indexing')
     parser.add_argument('output',
                         help='File to write output file (pickle format)')
     args = parser.parse_args()
 
+    wd = utils.load_vocabulary(args.vocabulary)
+    label_dict = utils.load_label_dict(args.label_dict)
     pairs = utils.load_pairs(args.input)
-    preprocess_pairs(pairs)
+    preprocess_pairs(pairs, wd, label_dict, args.lower)
+
     with open(args.output, 'wb') as f:
         cPickle.dump(pairs, f)
