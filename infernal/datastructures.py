@@ -183,6 +183,7 @@ class Token(object):
         self.id = num  # sequential id in the sentence
         self.index = index
         self.dep_index = dep_index
+        self.dependents = []
 
         # Token.head points to another token, not an id
         self.head = None 
@@ -277,3 +278,4 @@ class Sentence(object):
             head = self.tokens[head_idx]
             modifier = self.tokens[modifier_idx]
             modifier.head = head
+            head.dependents.append(modifier)
