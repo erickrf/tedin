@@ -46,14 +46,19 @@ class PairRanker(Trainable):
         # i.e. negative pairs should have a higher distance than positive ones
         diff = distances2 - distances1
         loss = tf.maximum(0., 1 - diff)
-        self.loss = tf.reduce_mean(loss)
+
+        tcl1 = self.tedin1.transformation_cost_loss
+        tcl2 = self.tedin2.transformation_cost_loss
+        self.loss = tf.reduce_mean(loss) + tcl1 + tcl2
 
         optimizer = tf.train.AdagradOptimizer(self.learning_rate)
         self.train_op = optimizer.minimize(self.loss)
 
     def _create_base_training_feeds(self, params):
         feeds = {self.learning_rate: params.learning_rate,
-                 self.dropout_keep: params.dropout}
+                 self.dropout_keep: params.dropout,
+                 self.tedin1.cost_regularizer: params.cost_regularizer,
+                 self.tedin2.cost_regularizer: params.cost_regularizer}
         return feeds
 
     def _get_next_batch(self, data, batch_size, training):

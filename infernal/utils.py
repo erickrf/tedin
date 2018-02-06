@@ -7,65 +7,20 @@ Utility functions
 '''
 
 import sys
-import re
 from six.moves import cPickle
 from xml.etree import cElementTree as ET
 import logging
-from nltk.tokenize import RegexpTokenizer
 from collections import defaultdict
 from xml.dom import minidom
 import numpy as np
-import nltk
 import json
 import os
 
 from . import config
 from . import datastructures as ds
-from . import openwordnetpt as own
-from . import ppdb
 
 
-content_word_tags = {'NOUN', 'VERB', 'ADJ', 'ADV', 'PNOUN'}
-
-
-class EmbeddingDictionary(object):
-    '''
-    Class for storing a word dictionary to embeddings. It treats special
-    cases of OOV words.
-    '''
-    def __init__(self, wd, embeddings):
-        '''
-        Create a new EmbeddingDictionary.
-
-        :param wd: path to vocabulary
-        :param embeddings: path to 2-d numpy array
-        '''
-        logging.info('Reading embeddings...')
-
-        # wd should include OOV treatment
-        self.wd = read_vocabulary(wd)
-        self.embeddings = np.load(embeddings)
-
-    def __getitem__(self, item):
-        return self.embeddings[self.wd[item]]
-
-    def get_oov_vector(self):
-        return self.embeddings[-1]
-
-    def set_oov_vector(self, vector):
-        self.embeddings[-1] = vector
-
-    def get_sentence_embeddings(self, sentence):
-        '''
-        Return an array with the embeddings of each token in the sentence
-
-        :param sentence: ds.Sentence
-        :return: numpy array (num_tokens, embedding_size)
-        :rtype: np.ndarray
-        '''
-        indices = [self.wd[token.text.lower()]
-                   for token in sentence.tokens]
-        return self.embeddings[indices]
+UNKNOWN = '<unk>'
 
 
 def print_cli_args():
@@ -75,41 +30,6 @@ def print_cli_args():
     """
     args = ' '.join(sys.argv)
     logging.info('The following command line arguments were given: %s' % args)
-
-
-def tokenize_sentence(text, change_quotes=True, change_digits=False):
-    '''
-    Tokenize the given sentence in Portuguese. The tokenization is done in
-    conformity with Universal Treebanks (at least it attempts so).
-
-    :param text: text to be tokenized, as a string
-    :param change_quotes: if True, change different kinds of quotation marks to "
-    :param change_digits: if True, replaces all digits with 9.
-    '''
-    if change_digits:
-        text = re.sub(r'\d', '9', text)
-    
-    if change_quotes:
-        text = text.replace('“', '"').replace('”', '"')
-    
-    tokenizer_regexp = r'''(?ux)
-    # the order of the patterns is important!!
-    (?:[^\W\d_]\.)+|                  # one letter abbreviations, e.g. E.U.A.
-    \d+(?:[.,]\d+)*(?:[.,]\d+)|       # numbers in format 999.999.999,99999
-    \.{3,}|                           # ellipsis or sequences of dots
-    \w+(?:\.(?!\.|$))?|               # words with numbers (including hours as 12h30), 
-                                      # followed by a single dot but not at the end of sentence
-    \d+:\d+|                          # time and proportions
-    \d+(?:[-\\/]\d+)*|                # dates. 12/03/2012 12-03-2012
-    (?:[DSds][Rr][Aa]?)\.|            # common abbreviations such as dr., sr., sra., dra.
-    \$|                               # currency sign
-    (?:[\#@]\w+])|                    # Hashtags and twitter user names
-    -+|                               # any sequence of dashes
-    \S                                # any non-space character
-    '''
-    tokenizer = RegexpTokenizer(tokenizer_regexp)
-    
-    return tokenizer.tokenize(text)
 
 
 def nested_list_to_array(sequences, dtype=np.int32, dim3=None):
@@ -182,144 +102,6 @@ def assign_word_indices(pairs, wd, lower=True):
             token.index = get_index(token.text)
 
 
-def load_stopwords():
-    """
-    Return a set of stopwords
-    """
-    return set(nltk.corpus.stopwords.words('portuguese'))
-
-
-def find_ppdb_alignments(pair, max_length):
-    """
-    Find lexical and phrasal alignments in the pair according to transformation
-    rules from the paraphrase database.
-
-    :param pair: Pair
-    :param max_length: maximum length of the left-hand side (in number of
-        tokens)
-    """
-    tokens_t = pair.annotated_t.tokens
-    tokens_h = pair.annotated_h.tokens
-    token_texts_t = [token.text.lower() for token in tokens_t]
-    token_texts_h = [token.text.lower() for token in tokens_h]
-    alignments = []
-
-    ppdb.load_ppdb(config.ppdb_path)
-
-    for i, token in enumerate(tokens_t):
-        # check the maximum length that makes sense to search for
-        # (i.e., so it doesn't go past sentence end)
-        max_possible_length = min(len(tokens_t) - i, max_length)
-        for length in range(1, max_possible_length):
-            if length == 1 and token.pos not in content_word_tags:
-                continue
-
-            lhs = [token for token in token_texts_t[i:i + length]]
-            rhs_rules = ppdb.get_rhs(lhs)
-            if not rhs_rules:
-                continue
-
-            # now get the token objects, instead of just their text
-            lhs = tokens_t[i:i + length]
-
-            for rule in rhs_rules:
-                index = ppdb.search(token_texts_h, rule)
-                if index == -1:
-                    continue
-                alignment = (lhs, tokens_h[index:index + len(rule)])
-                alignments.append(alignment)
-
-    return alignments
-
-
-def filter_words_by_pos(tokens, tags=None):
-    """
-    Filter out words based on their POS tags.
-
-    If no set of tags is provided, a default of content tags is used:
-    {'NOUN', 'VERB', 'ADJ', 'ADV', 'PNOUN'}
-
-    :param tokens: list of datastructures.Token objects
-    :param tags: optional set of allowed tags
-    :return: list of the tokens having the allowed tokens
-    """
-    if tags is None:
-        tags = content_word_tags
-
-    return [token for token in tokens if token.pos in tags]
-
-
-def find_lexical_alignments(pair):
-    '''
-    Find the lexical alignments in the pair.
-    
-    Lexical alignments are simply two equal or synonym words.
-    
-    :type pair: datastructures.Pair
-    :return: list with the (Token, Token) aligned tuples
-    '''
-    # pronouns aren't content words, but let's pretend they are
-    content_word_tags = {'NOUN', 'VERB', 'PRON', 'ADJ', 'ADV', 'PNOUN'}
-    content_words_t = [token for token in filter_words_by_pos(
-                            pair.annotated_t.tokens, content_word_tags)
-                       # own-pt lists ser and ter as synonyms
-                       if token.lemma not in ['ser', 'ter']]
-
-    content_words_h = [token for token in filter_words_by_pos(
-                            pair.annotated_h.tokens, content_word_tags)
-                       if token.lemma not in ['ser', 'ter']]
-    
-    lexical_alignments = []
-    
-    for token in pair.annotated_t.tokens:
-        token.aligned_to = []
-    for token in pair.annotated_h.tokens:
-        token.aligned_to = []
-
-    own.load_wordnet(config.ownpt_path)
-    for token_t in content_words_t:
-        nominalizations_t = own.find_nominalizations(token_t.lemma)
-
-        for token_h in content_words_h:
-            aligned = False
-            if token_t.lemma == token_h.lemma:
-                aligned = True
-            elif own.are_synonyms(token_t.lemma, token_h.lemma):
-                aligned = True
-            elif token_h.lemma in nominalizations_t:
-                aligned = True
-            elif token_t.lemma in own.find_nominalizations(token_h.lemma):
-                aligned = True
-
-            if aligned:
-                lexical_alignments.append((token_t, token_h))
-                token_t.aligned_to.append(token_h)
-                token_h.aligned_to.append(token_t)
-
-    return lexical_alignments
-
-
-def extract_classes(pairs):
-    '''
-    Extract the class infomartion (paraphrase, entailment, none, contradiction)
-    from the pairs. 
-    
-    :return: a numpy array with values from 0 to num_classes - 1
-    '''
-    classes = np.array([pair.entailment.value for pair in pairs])
-    return classes
-
-
-def extract_similarities(pairs):
-    '''
-    Extract the similarity value from the pairs.
-    
-    :return: a numpy array
-    '''
-    z = np.array([p.similarity for p in pairs])
-    return z
-
-
 def read_pickled_pairs(path, add_inverted=False,
                        paraphrase_to_entailment=False):
     '''
@@ -363,26 +145,7 @@ def read_pickled_pairs(path, add_inverted=False,
     return pairs
 
 
-def combine_paraphrase_predictions(predictions1, predictions2):
-    '''
-    Combine two sequences of binary predictions (entailment or none)
-    into one sequence of three way predictions (entailment, none or paraphrase).
-    For any pair, if the second prediction is entailment and the first one
-    is none, the result will be none.
-
-    :param predictions1: 1-d numpy array
-    :param predictions2: 1-d numpy array
-    :return: 1-d numpy array
-    '''
-    ent_value = ds.Entailment.entailment.value
-    idx_paraphrases = np.logical_and(predictions1 == ent_value,
-                                     predictions2 == ent_value)
-    combined = predictions1.copy()
-    combined[idx_paraphrases] = ds.Entailment.paraphrase.value
-    return combined
-
-
-def read_vocabulary(path):
+def load_vocabulary(path):
     """
     Read a file with the vocabulary corresponding to an embedding model.
 
@@ -396,13 +159,16 @@ def read_vocabulary(path):
     words = text.splitlines()
     values = range(len(words))
     d = dict(zip(words, values))
-    unk_index = d['<unk>']
+    if UNKNOWN not in d:
+        d[UNKNOWN] = len(d)
+
+    unk_index = d[UNKNOWN]
     word_dict = defaultdict(lambda: unk_index, d)
 
     return word_dict
 
 
-def read_pairs(filename):
+def load_pairs(filename):
     '''
     Read the pairs from the given file.
 
@@ -411,16 +177,16 @@ def read_pairs(filename):
     '''
     lower_filename = filename.lower()
     if lower_filename.endswith('.tsv'):
-        return read_tsv(filename)
+        return load_tsv(filename)
     elif lower_filename.endswith('.xml'):
-        return read_xml(filename)
+        return load_xml(filename)
     else:
         msg = 'Unrecognized file extension (expecting .tsv or .xml): %s'
         msg %= filename
         raise ValueError(msg)
 
 
-def read_tsv(filename):
+def load_tsv(filename):
     '''
     Read a TSV file with the format, as used in the SICK corpus.
 
@@ -458,7 +224,7 @@ def map_entailment_string(ent_string):
     return entailment
 
 
-def read_xml(filename):
+def load_xml(filename):
     '''
     Read an RTE XML file and return a list of Pair objects.
     '''
@@ -623,11 +389,11 @@ def load_embeddings(embeddings_path, normalize=True):
                                                       vocabulary_path)
 
     wd = {word: ind for ind, word in enumerate(wordlist)}
-    if '<unk>' in wd:
-        unk_index = wd['<unk>']
+    if UNKNOWN in wd:
+        unk_index = wd[UNKNOWN]
     else:
         unk_index = len(wd)
-        wd['<unk>'] = unk_index
+        wd[UNKNOWN] = unk_index
         mean = embeddings.mean()
         std = embeddings.std()
         shape = [1, embeddings.shape[1]]

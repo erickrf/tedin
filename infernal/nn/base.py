@@ -15,13 +15,13 @@ class TedinParameters(tf.contrib.training.HParams):
     """
     def __init__(self, learning_rate, dropout, batch_size, num_steps,
                  num_units, embeddings_shape, label_embeddings_shape,
-                 num_classes, l2=0):
+                 num_classes, cost_regularizer=0, l2=0):
         super(TedinParameters, self).__init__(
             learning_rate=learning_rate, dropout=dropout, batch_size=batch_size,
             l2=l2, num_steps=num_steps, num_units=num_units,
             embeddings_shape=embeddings_shape,
             label_embeddings_shape=label_embeddings_shape,
-            num_classes=num_classes
+            num_classes=num_classes, cost_regularizer=cost_regularizer
         )
 
 

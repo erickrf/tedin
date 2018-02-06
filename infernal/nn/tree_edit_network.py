@@ -181,6 +181,8 @@ class TreeEditDistanceNetwork(Trainable):
         self.learning_rate = tf.placeholder(tf.float32, None, 'learning_rate')
         self.dropout_keep = tf.placeholder_with_default(
             1., None, 'dropout_keep')
+        self.cost_regularizer = tf.placeholder_with_default(
+            0., None, 'cost_regularizer')
 
         # labels for the supervised training
         self.labels = tf.placeholder(tf.int32, [None], 'labels')
@@ -257,12 +259,26 @@ class TreeEditDistanceNetwork(Trainable):
 
             return total_costs
 
+        # each of these costs variable has shape (batch,)
         costs_insert = sum_real_operation_costs('insert', self.emb_insert,
                                                 None, self.num_inserts)
         costs_remove = sum_real_operation_costs('remove', self.emb_remove,
                                                 None, self.num_removes)
         costs_update = sum_real_operation_costs(
             'update', self.emb_update1, self.emb_update2, self.num_updates)
+
+        # the cost regularizer penalizes the weights when the cost per operation
+        # goes below 1
+        penalty_insert = tf.maximum(
+            tf.cast(self.num_inserts, tf.float32) - costs_insert, 0.)
+        penalty_remove = tf.maximum(
+            tf.cast(self.num_removes, tf.float32) - costs_remove, 0.)
+        penalty_update = tf.maximum(
+            tf.cast(self.num_updates, tf.float32) - costs_update, 0.)
+
+        penalty_sum = penalty_insert + penalty_remove + penalty_update
+        self.transformation_cost_loss = tf.reduce_mean(penalty_sum) * \
+            self.cost_regularizer
 
         self.transformation_cost = costs_insert + costs_remove + costs_update
 

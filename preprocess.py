@@ -53,7 +53,7 @@ if __name__ == '__main__':
                         help='File to write output file (pickle format)')
     args = parser.parse_args()
 
-    pairs = utils.read_pairs(args.input)
+    pairs = utils.load_pairs(args.input)
     preprocess_pairs(pairs)
     with open(args.output, 'wb') as f:
         cPickle.dump(pairs, f)

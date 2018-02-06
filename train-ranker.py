@@ -9,6 +9,7 @@ from __future__ import division, print_function, unicode_literals
 
 import argparse
 import logging
+import tensorflow as tf
 
 from infernal import utils
 from infernal import nn
@@ -35,7 +36,7 @@ def load_pairs(path, wd, label_dict):
     """
     Load a pickle file with pairs and do some necessary preprocessing.
 
-    :param path: path to saved pairs
+    :param path: path to saved pairs in pickle format
     :param wd: word dictionary
     :param label_dict: label dictionary
     :return: tuple of ds.Datasets (positive, negative)
@@ -49,6 +50,15 @@ def load_pairs(path, wd, label_dict):
     logging.info(msg)
 
     return pos_data, neg_data
+
+
+def print_variables():
+    """
+    Print the defined tensorflow variables
+    """
+    print('Tensorflow variables:')
+    for v in tf.global_variables():
+        print(v.name, v.shape.as_list())
 
 
 if __name__ == '__main__':
@@ -73,6 +83,8 @@ if __name__ == '__main__':
                         dest='batch')
     parser.add_argument('-f', help='Evaluation frequency', type=int, default=50,
                         dest='eval_frequency')
+    parser.add_argument('-r', help='Opoeration cost regularizer', type=float,
+                        default=0, dest='cost_regularizer')
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -86,9 +98,10 @@ if __name__ == '__main__':
     label_emb_shape = [len(label_dict), args.label_embedding_size]
     params = nn.TedinParameters(args.learning_rate, args.dropout, args.batch,
                                 args.steps, args.num_units, embeddings.shape,
-                                label_emb_shape, 3)
+                                label_emb_shape, 3, args.cost_regularizer)
 
     ranker = nn.PairRanker(params)
     ranker.initialize(embeddings)
+    print_variables()
     ranker.train(train_data, valid_data, params,
                  args.model, args.eval_frequency)
