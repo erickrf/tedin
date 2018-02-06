@@ -4,6 +4,7 @@ from __future__ import division, print_function, unicode_literals
 
 import abc
 import os
+import math
 import tensorflow as tf
 from six.moves import cPickle
 
@@ -153,10 +154,10 @@ class Trainable(object):
         :return: list with validation_fetches
         """
         data_size = self._get_data_size(data)
-        if batch_size is None:
+        if batch_size is None or batch_size > data_size:
             batch_size = data_size
 
-        num_batches = int(data_size / batch_size)
+        num_batches = math.ceil(data_size / batch_size)
         self._init_validation(data)
         for _ in range(num_batches):
             batch = self._get_next_batch(data, batch_size, training=False)
