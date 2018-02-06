@@ -57,7 +57,7 @@ def simple_tree_distance(pair):
         return node.dependents
 
     def get_label(node):
-        return node.text.lower()
+        return node.index
         # return node.lemma, node.dependency_relation
 
     def label_dist(label1, label2):
