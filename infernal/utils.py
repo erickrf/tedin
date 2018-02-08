@@ -418,7 +418,7 @@ def load_embeddings_and_dict(embeddings_path, normalize=True):
     return wd, embeddings
 
 
-def load_embeddings(path_or_paths, add_vectors=None, path_to_save=None):
+def load_embeddings(path_or_paths, add_vectors=None, dir_to_save=None):
     """
     Load an embedding model from the given path
 
@@ -426,7 +426,7 @@ def load_embeddings(path_or_paths, add_vectors=None, path_to_save=None):
         all of them will be concatenated in order.
     :param add_vectors: number of vectors to add to the embedding matrix. They
         will be generated randomly with mean and stdev from the others.
-    :param path_to_save: path to save the newly generated vectors, if any
+    :param dir_to_save: directory to save the newly generated vectors, if any
     :return: numpy array
     """
     if not isinstance(path_or_paths, (list, tuple)):
@@ -442,7 +442,8 @@ def load_embeddings(path_or_paths, add_vectors=None, path_to_save=None):
         shape = [add_vectors, arrays[0].shape[1]]
         new_vectors = np.random.normal(mean, std, shape)
 
-        np.save(path_to_save, new_vectors)
+        path = os.path.join(dir_to_save, 'extra-embeddings.npy')
+        np.save(path, new_vectors)
         arrays.append(new_vectors)
 
     embeddings = np.concatenate(arrays)
