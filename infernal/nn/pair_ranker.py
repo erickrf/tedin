@@ -2,6 +2,7 @@
 
 from __future__ import division, print_function, unicode_literals
 
+import numpy as np
 import tensorflow as tf
 
 from .tree_edit_network import TreeEditDistanceNetwork
@@ -15,7 +16,7 @@ class PairRanker(Trainable):
     """
     filename = 'tedin'
 
-    def __init__(self, params):
+    def __init__(self, params, session=None):
         """
         Initialize a TreeComparisonNetwork.
 
@@ -30,7 +31,8 @@ class PairRanker(Trainable):
 
         # The network is trained with pairs positive and negative
         # there is a TreeEditDistanceNetwork for each
-        self.tedin1 = TreeEditDistanceNetwork(params, create_optimizer=False)
+        self.tedin1 = TreeEditDistanceNetwork(params, create_optimizer=False,
+                                              session=session)
         self.session = self.tedin1.session
         self.tedin2 = TreeEditDistanceNetwork(
             params, self.session, self.tedin1.embeddings, reuse_weights=True,
@@ -130,3 +132,38 @@ class PairRanker(Trainable):
         """
         self.session.run(tf.global_variables_initializer(),
                          {self.tedin1.embedding_ph: embeddings})
+
+    @classmethod
+    def load(cls, path, embeddings, session=None):
+        """
+        Load a saved model
+
+        :param path: directory with saved model
+        :param embeddings: numpy embedding matrix
+        :param session: existing tensorflow session to be reuse, or None to
+            create a new one
+        :return: PairRanker instance
+        """
+        params = cls.load_params(path)
+
+        if session is None:
+            session = tf.Session()
+
+        ranker = PairRanker(params, session)
+        saver = tf.train.Saver(tf.trainable_variables())
+        saver.restore(session, cls.get_base_file_name(path))
+        session.run(tf.variables_initializer([ranker.tedin1.embeddings]),
+                    {ranker.tedin1.embedding_ph: embeddings})
+        return ranker
+
+    def evaluate(self, data, batch_size=512):
+        """
+        Evaluate the model on the given dataset
+
+        :param data: Dataset
+        :param batch_size: batch size, important if the data don't fit all in
+            memory
+        :return: average loss
+        """
+        feeds = self._create_data_feeds(data)
+        return self.session.run(self.loss, feeds)

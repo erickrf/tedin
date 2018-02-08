@@ -17,7 +17,7 @@ from infernal import external
 from infernal import datastructures as ds
 
 
-def preprocess_pairs(pairs, wd, label_dict, lower):
+def preprocess_pairs(pairs, wd, dep_dict, lower):
     """
     Preprocess the pairs in-place so we can extract features later on.
 
@@ -34,8 +34,8 @@ def preprocess_pairs(pairs, wd, label_dict, lower):
         output_h = external.call_corenlp(pair.h)
 
         try:
-            sent1 = ds.Sentence(pair.t, output_t, wd, label_dict, lower)
-            sent2 = ds.Sentence(pair.h, output_h, wd, label_dict, lower)
+            sent1 = ds.Sentence(pair.t, output_t, wd, dep_dict, lower)
+            sent2 = ds.Sentence(pair.h, output_h, wd, dep_dict, lower)
         except ValueError as e:
             tb = traceback.format_exc()
             logging.error('Error reading parser output:', e)
@@ -51,8 +51,8 @@ if __name__ == '__main__':
     parser.add_argument('input', help='XML or TSV file with pairs')
     parser.add_argument('vocabulary', help='Vocabulary file (corresponding to '
                                            'an embedding matrix)')
-    parser.add_argument('label_dict', help='Dictionary of dependency labels in '
-                                           'json format')
+    parser.add_argument('dep_dict', help='Dictionary of dependency labels in '
+                                         'json format')
     parser.add_argument('--lower', action='store_true',
                         help='Lowercase tokens before indexing')
     parser.add_argument('output',
@@ -60,9 +60,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     wd = utils.load_vocabulary(args.vocabulary)
-    label_dict = utils.load_label_dict(args.label_dict)
+    dep_dict = utils.load_label_dict(args.dep_dict)
     pairs = utils.load_pairs(args.input)
-    preprocess_pairs(pairs, wd, label_dict, args.lower)
+    preprocess_pairs(pairs, wd, dep_dict, args.lower)
 
     with open(args.output, 'wb') as f:
         cPickle.dump(pairs, f)

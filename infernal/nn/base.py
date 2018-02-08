@@ -199,28 +199,27 @@ class Trainable(object):
             params = cPickle.load(f)
         return params
 
-    def train(self, train_data, valid_data, params, model_dir, report_interval):
+    def train(self, train_data, valid_data, model_dir, report_interval):
         """
         Train the model
 
         :param train_data: tuple of Datasets (positive, negative)
         :param valid_data: tuple of Datasets (positive, negative)
-        :param params: TedinParameters
         :param model_dir: path to the model dir
         :param report_interval: how many steps before each performance report
         :return:
         """
-        self._init_train_stats(params, report_interval)
+        self._init_train_stats(self.params, report_interval)
 
         self.path = os.path.join(model_dir, self.filename)
         saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=1)
         self.save_params()
 
-        feeds = self._create_base_training_feeds(params)
+        feeds = self._create_base_training_feeds(self.params)
 
         self.logger.info('Starting training')
-        for step in range(1, params.num_steps + 1):
-            batch = self._get_next_batch(train_data, params.batch_size,
+        for step in range(1, self.params.num_steps + 1):
+            batch = self._get_next_batch(train_data, self.params.batch_size,
                                          training=True)
             fetches = self.train_fetches
             values = self._run(feeds, fetches, batch)

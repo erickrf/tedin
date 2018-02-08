@@ -76,6 +76,14 @@ def load_label_dict(path):
     return d
 
 
+def write_label_dict(label_dict, path):
+    """
+    Write a dictionary to a path as a json file
+    """
+    with open(path, 'w') as f:
+        json.dump(label_dict, f)
+
+
 def assign_word_indices(pairs, wd, lower=True):
     """
     Assign each token in the sentences of pairs their embedding index.
@@ -410,24 +418,133 @@ def load_embeddings_and_dict(embeddings_path, normalize=True):
     return wd, embeddings
 
 
-def load_embeddings(path, add_vectors=None):
+def load_embeddings(path_or_paths, add_vectors=None, path_to_save=None):
     """
     Load an embedding model from the given path
 
-    :param path: path to a numpy file
+    :param path_or_paths: path or list of paths to a numpy file. If a list,
+        all of them will be concatenated in order.
     :param add_vectors: number of vectors to add to the embedding matrix. They
         will be generated randomly with mean and stdev from the others.
+    :param path_to_save: path to save the newly generated vectors, if any
     :return: numpy array
     """
-    embeddings = np.load(path)
-    if add_vectors:
-        mean = embeddings.mean()
-        std = embeddings.std()
-        shape = [add_vectors, embeddings.shape[1]]
-        new_vectors = np.random.normal(mean, std, shape)
-        embeddings = np.concatenate([embeddings, new_vectors])
+    if not isinstance(path_or_paths, (list, tuple)):
+        path_or_paths = [path_or_paths]
 
+    arrays = []
+    for path in path_or_paths:
+        arrays.append(np.load(path))
+
+    if add_vectors:
+        mean = arrays[0].mean()
+        std = arrays[0].std()
+        shape = [add_vectors, arrays[0].shape[1]]
+        new_vectors = np.random.normal(mean, std, shape)
+
+        np.save(path_to_save, new_vectors)
+        arrays.append(new_vectors)
+
+    embeddings = np.concatenate(arrays)
     return embeddings
+
+
+def create_tedin_dataset(pairs, label_dict):
+    """
+    Create a Dataset object to feed a Tedin model.
+
+    :param pairs: list of parsed Pair objects
+    :param label_dict: dictionary mapping labels to integers
+    :return: Dataset
+    """
+    nodes1 = []
+    nodes2 = []
+    labels = []
+    for pair in pairs:
+        t = pair.annotated_t
+        h = pair.annotated_h
+        t_indices = []
+        h_indices = []
+
+        for token in t.tokens:
+            t_indices.append([token.index, token.dep_index])
+
+        for token in h.tokens:
+            h_indices.append([token.index, token.dep_index])
+
+        nodes1.append(t_indices)
+        nodes2.append(h_indices)
+        labels.append(label_dict[pair.entailment.name])
+
+    nodes1, _ = nested_list_to_array(nodes1, dim3=2)
+    nodes2, _ = nested_list_to_array(nodes2, dim3=2)
+    labels = np.array(labels)
+
+    dataset = ds.Dataset(pairs, nodes1, nodes2, labels)
+
+    return dataset
+
+
+def split_positive_negative(pairs):
+    """
+    Split a list of pairs into two lists: one containing only positive
+    and the other containing only negative pairs.
+
+    :return: tuple (positives, negatives)
+    """
+    positive = [pair for pair in pairs
+                if pair.entailment == ds.Entailment.entailment
+                or pair.entailment == ds.Entailment.paraphrase]
+    neutrals = [pair for pair in pairs
+                if pair.entailment == ds.Entailment.none]
+
+    return positive, neutrals
+
+
+def load_positive_and_negative_data(path, label_dict=None):
+    """
+    Load a pickle file with pairs and do some necessary preprocessing for the
+    pairwise ranker.
+
+    :param path: path to saved pairs in pickle format
+    :return: tuple of ds.Datasets (positive, negative)
+    """
+    pairs = load_pickled_pairs(path)
+    if label_dict is None:
+        label_dict = create_label_dict(pairs)
+
+    pos_pairs, neg_pairs = split_positive_negative(pairs)
+    pos_data = create_tedin_dataset(pos_pairs, label_dict)
+    neg_data = create_tedin_dataset(neg_pairs, label_dict)
+
+    msg = '%d positive and %d negative pairs' % (len(pos_data), len(neg_data))
+    logging.info(msg)
+
+    return pos_data, neg_data
+
+
+def create_label_dict(pairs):
+    labels = set(pair.entailment.name for pair in pairs)
+    label_dict = {label: i for i, label in enumerate(labels)}
+    return label_dict
+
+
+def load_data(path, label_dict=None):
+    """
+    Load a pickle file with pairs and return a dataset for the tedin model.
+
+    :param path: path to pickle file
+    :param label_dict: if given, must be a mapping from entailment values to
+        ints. If not given, one will be generated
+    :return: dataset, label_dict
+    """
+    pairs = load_pickled_pairs(path)
+
+    if label_dict is None:
+        label_dict = create_label_dict(pairs)
+
+    data = create_tedin_dataset(pairs, label_dict)
+    return data, label_dict
 
 
 def get_logger(name='logger'):

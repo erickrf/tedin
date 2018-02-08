@@ -98,42 +98,6 @@ def mask_3d(inputs, lengths, mask_value):
     return masked
 
 
-def create_tedin_dataset(pairs):
-    """
-    Create a Dataset object to feed a Tedin model.
-
-    :param pairs: list of parsed Pair objects
-    :return: Dataset
-    """
-    nodes1 = []
-    nodes2 = []
-    labels = []
-    for pair in pairs:
-        t = pair.annotated_t
-        h = pair.annotated_h
-        t_indices = []
-        h_indices = []
-
-        for token in t.tokens:
-            t_indices.append([token.index, token.dep_index])
-
-        for token in h.tokens:
-            h_indices.append([token.index, token.dep_index])
-
-        nodes1.append(t_indices)
-        nodes2.append(h_indices)
-        labels.append(pair.entailment.value)
-
-    nodes1, _ = utils.nested_list_to_array(nodes1, dim3=2)
-    nodes2, _ = utils.nested_list_to_array(nodes2, dim3=2)
-
-    # labels are originally numbered starting from 1
-    labels = np.array(labels) - 1
-    dataset = Dataset(pairs, nodes1, nodes2, labels)
-
-    return dataset
-
-
 class TreeEditDistanceNetwork(Trainable):
     """
     Model that learns weights for different tree edit operations.
@@ -215,10 +179,11 @@ class TreeEditDistanceNetwork(Trainable):
 
         params = cls.load_params(path)
         tedin = TreeEditDistanceNetwork(params, session)
+        tedin.initialize(embeddings)
+
         saver = tf.train.Saver(tf.trainable_variables())
         saver.restore(session, cls.get_base_file_name(path))
-        session.run(tf.variables_initializer([tedin.embeddings]),
-                    {tedin.embedding_ph: embeddings})
+
         return tedin
 
     def _create_base_training_feeds(self, params):
@@ -291,7 +256,7 @@ class TreeEditDistanceNetwork(Trainable):
 
         # these are the lengths of the sequences of operations
         self.num_inserts = tf.placeholder(tf.int32, [None], 'num_inserts')
-        self.num_removes = tf.placeholder(tf.int32, [None], 'num_inserts')
+        self.num_removes = tf.placeholder(tf.int32, [None], 'num_removes')
         self.num_updates = tf.placeholder(tf.int32, [None], 'num_updates')
 
         # these embedded values are (batch, max_ops, embedding_size)
@@ -494,17 +459,23 @@ class TreeEditDistanceNetwork(Trainable):
 
         return hidden
 
-    def run_zss(self, batch, return_costs=False):
+    def run_zss(self, batch, return_costs=False, return_operations=True):
         """
         Run the zhang-shasha algorithm with TEDIN's weights.
 
         :param batch: Dataset
-        :param return_costs: if True, each item in the returned list contains a
-            tuple (cost, operations)
-        :return: if return_costs is True, a list of tuples
-            (cost, transformations); otherwise or a list of transformations.
+        :param return_costs: if True, each item in the returned list will
+            include the total transformation cost
+        :param return_operations: if True, each item in the returned list will
+            include the operation list
+        :return: if return_costs and return_operations are True, a list of tuples
+            (cost, transformations); otherwise or a list of transformations or
+            costs. If both are False an exception is thrown.
             Each transformation is a list of zss.Operation
         """
+        if not return_costs and not return_operations:
+            raise ValueError('It was not specified what to return')
+
         # precompute the insert and remove costs
         feeds = {self.nodes1: batch.nodes1, self.nodes2: batch.nodes2}
 
@@ -517,10 +488,12 @@ class TreeEditDistanceNetwork(Trainable):
             cost, operations = find_zss_operations(
                 item.pairs, insert_costs[i], remove_costs[i], update_costs[i])
 
-            if return_costs:
+            if return_costs and return_operations:
                 all_operations.append((cost, operations))
-            else:
+            elif return_operations:
                 all_operations.append(operations)
+            else:
+                all_operations.append(cost)
 
         return all_operations
 
@@ -549,7 +522,7 @@ class TreeEditDistanceNetwork(Trainable):
                     inserts.append([a2.index, a2.dep_index])
                 elif op.type == REMOVE:
                     removes.append([a1.index, a1.dep_index])
-                elif op.type == UPDATE:
+                elif op.type == UPDATE or op.type == MATCH:
                     updates1.append([a1.index, a1.dep_index])
                     updates2.append([a2.index, a2.dep_index])
 
@@ -582,7 +555,9 @@ class TreeEditDistanceNetwork(Trainable):
         :return: dictionary of feeds with the operations and their arguments
         """
         operations = self.run_zss(batch)
-        return self.create_feeds_from_operations(operations)
+        feeds = self.create_feeds_from_operations(operations)
+        feeds[self.labels] = batch.labels
+        return feeds
 
     def initialize(self, embeddings):
         """

@@ -17,40 +17,6 @@ from infernal import nn
 from infernal import datastructures as ds
 
 
-def split_positive_negative(pairs):
-    """
-    Split a list of pairs into two lists: one containing only positive
-    and the other containing only negative pairs.
-
-    :return: tuple (positives, negatives)
-    """
-    positive = [pair for pair in pairs
-                if pair.entailment == ds.Entailment.entailment
-                or pair.entailment == ds.Entailment.paraphrase]
-    neutrals = [pair for pair in pairs
-                if pair.entailment == ds.Entailment.none]
-
-    return positive, neutrals
-
-
-def load_pairs(path):
-    """
-    Load a pickle file with pairs and do some necessary preprocessing.
-
-    :param path: path to saved pairs in pickle format
-    :return: tuple of ds.Datasets (positive, negative)
-    """
-    pairs = utils.load_pickled_pairs(path)
-    pos_pairs, neg_pairs = split_positive_negative(pairs)
-    pos_data = nn.create_tedin_dataset(pos_pairs)
-    neg_data = nn.create_tedin_dataset(neg_pairs)
-
-    msg = '%d positive and %d negative pairs' % (len(pos_data), len(neg_data))
-    logging.info(msg)
-
-    return pos_data, neg_data
-
-
 def print_variables():
     """
     Print the defined tensorflow variables
@@ -95,9 +61,9 @@ if __name__ == '__main__':
 
     # add a single OOV vector here
     # TODO: use a more sensible way of generating embeddings for OOV words
-    embeddings = utils.load_embeddings(args.embeddings, 1)
-    train_data = load_pairs(args.train)
-    valid_data = load_pairs(args.valid)
+    embeddings = utils.load_embeddings(args.embeddings, 1, args.model)
+    train_data = utils.load_positive_and_negative_data(args.train)
+    valid_data = utils.load_positive_and_negative_data(args.valid)
     num_labels = get_num_dep_labels(train_data[0])
 
     label_emb_shape = [num_labels, args.label_embedding_size]
@@ -107,6 +73,4 @@ if __name__ == '__main__':
 
     ranker = nn.PairRanker(params)
     ranker.initialize(embeddings)
-    print_variables()
-    ranker.train(train_data, valid_data, params,
-                 args.model, args.eval_frequency)
+    ranker.train(train_data, valid_data, args.model, args.eval_frequency)
