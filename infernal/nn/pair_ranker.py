@@ -65,16 +65,21 @@ class PairRanker(Trainable):
 
     def _get_next_batch(self, data, batch_size, training):
         pos_data, neg_data = data
-        if not training:
-            # in validation, make sure that both batches have the same size
-            # this is not necessary in training because the dataset is wrapped
-            # around
-            batch_size = min(batch_size, len(pos_data), len(neg_data))
-        
         pos_batch = pos_data.next_batch(batch_size, wrap=training,
                                         shuffle=training)
         neg_batch = neg_data.next_batch(batch_size, wrap=training,
                                         shuffle=training)
+
+        if not training and len(pos_batch) != len(neg_batch):
+            # in validation, make sure that both batches have the same size
+            # this is not necessary in training because the dataset is wrapped
+            # around
+            min_len = min(len(pos_batch), len(neg_batch))
+            if len(pos_batch) > len(neg_batch):
+                pos_batch = pos_batch[:min_len]
+            else:
+                neg_batch = neg_batch[:min_len]
+
         return pos_batch, neg_batch
 
     def _create_data_feeds(self, data):
