@@ -61,7 +61,8 @@ if __name__ == '__main__':
 
     # add a single OOV vector here
     # TODO: use a more sensible way of generating embeddings for OOV words
-    embeddings = utils.load_embeddings(args.embeddings, 1, args.model)
+    embeddings = utils.load_embeddings(args.embeddings, add_vectors=1,
+                                       dir_to_save=args.model)
     train_data = utils.load_positive_and_negative_data(args.train)
     valid_data = utils.load_positive_and_negative_data(args.valid)
     num_labels = get_num_dep_labels(train_data[0])

@@ -32,8 +32,10 @@ if __name__ == '__main__':
                         dest='eval_frequency')
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
+    utils.print_cli_args()
 
-    _, embeddings = utils.load_embeddings_and_dict(args.embeddings)
+    extra_path = utils.get_embeddings_path(args.model)
+    embeddings = utils.load_embeddings([args.embeddings, extra_path])
 
     train_data, label_dict = utils.load_data(args.train)
     valid_data, _ = utils.load_data(args.valid, label_dict)
