@@ -292,9 +292,13 @@ class TreeEditDistanceNetwork(Trainable):
             max_values = tf.reduce_max(tensor_list, 0)
             conv_output = tf.nn.dropout(max_values, self.dropout_keep)
 
+        init = tf.glorot_normal_initializer()
+        with tf.variable_scope('linear', reuse=self.reuse_weights):
+            hidden = tf.layers.dense(conv_output, self.num_hidden_units,
+                                     tf.nn.relu, kernel_initializer=init)
+
         with tf.variable_scope('softmax', reuse=self.reuse_weights):
-            init = tf.glorot_normal_initializer()
-            logits = tf.layers.dense(conv_output, self.num_classes,
+            logits = tf.layers.dense(hidden, self.num_classes,
                                      kernel_initializer=init)
 
         self.answers = tf.argmax(logits, 1, 'answers')
