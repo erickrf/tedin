@@ -9,6 +9,7 @@ This module contains data structures used by the related scripts.
 import six
 from enum import Enum
 import numpy as np
+from collections import namedtuple
 
 
 def _compat_repr(repr_string, encoding='utf-8'):
@@ -135,43 +136,7 @@ class Entailment(Enum):
     contradiction = 4
 
 
-class Pair(object):
-    '''
-    Class representing a pair of texts from SICK or RTE.
-    It is meant to be used as an abstract representation for both.
-    '''
-    def __init__(self, t, h, id_, entailment, similarity=None):
-        """
-        :param t: the first sentence as a string
-        :param h: the second sentence as a string
-        :param id_: the id in the dataset. not very important
-        :param entailment: instance of the Entailment enum
-        :param similarity: similarity score as a float
-        """
-        self.t = t
-        self.h = h
-        self.id = id_
-        self.entailment = entailment
-        self.annotated_h = None
-        self.annotated_t = None
-        
-        if similarity is not None:
-            self.similarity = similarity
-
-    def inverted_pair(self):
-        """
-        Return an inverted version of this pair; i.e., exchange the
-        first and second sentence, as well as the associated information.
-        """
-        if self.entailment == Entailment.paraphrase:
-            entailment_value = Entailment.paraphrase
-        else:
-            entailment_value = Entailment.none
-
-        p = Pair(self.h, self.t, self.id, entailment_value, self.similarity)
-        p.annotated_t = self.annotated_h
-        p.annotated_h = self.annotated_t
-        return p
+Pair = namedtuple('Pair', ['annotated_t', 'annotated_h', 'label'])
 
 
 class Token(object):
@@ -179,6 +144,8 @@ class Token(object):
     Simple data container class representing a token and its linguistic
     annotations.
     '''
+    __slots__ = 'id', 'index', 'dep_index', 'dependents', 'head'
+
     def __init__(self, num, index, dep_index):
         self.id = num  # sequential id in the sentence
         self.index = index
@@ -186,8 +153,8 @@ class Token(object):
         self.dependents = []
 
         # Token.head points to another token, not an id
-        self.head = None 
-    
+        self.head = None
+
     def __repr__(self):
         repr_str = '<Token %s, Dep rel=%s>' % (self.index, self.dep_index)
         return _compat_repr(repr_str)
@@ -216,20 +183,20 @@ class Sentence(object):
     '''
     Class to store a sentence with linguistic annotations.
     '''
-    def __init__(self, text, parser_output, word_dict, dep_dict, lower=False):
+    __slots__ = 'tokens', 'root'
+
+    def __init__(self, parser_output, word_dict, dep_dict, lower=False):
         '''
         Initialize a sentence from the output of one of the supported parsers. 
         It checks for the tokens themselves, pos tags, lemmas
         and dependency annotations.
 
-        :param text: The non-tokenized text of the sentence
         :param parser_output: if None, an empty Sentence object is created.
         :param word_dict: dictionary mapping words to integers
         :param dep_dict: dictionary mapping dependency relations to integers
         :param lower: whether to convert tokens to lower case
         '''
         self.tokens = []
-        self.text = text
         self._read_conll_output(parser_output, word_dict, dep_dict, lower)
 
     def __str__(self):

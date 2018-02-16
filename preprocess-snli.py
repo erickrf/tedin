@@ -15,12 +15,11 @@ from infernal import datastructures as ds
 from infernal import utils
 
 
-def read_pairs(path):
+def read_labels(path):
     """
-    Read pairs from the given path.
+    Read pairs labels from the given path.
     """
-    pairs = []
-    pair_counter = 1
+    labels = []
     with open(path, 'r') as f:
         for line in f:
             data = json.loads(line)
@@ -28,14 +27,9 @@ def read_pairs(path):
             #     # ignore items without a gold label
             #     continue
 
-            sent1 = data['sentence1']
-            sent2 = data['sentence2']
-            label = data['gold_label']
+            labels.append(data['gold_label'])
 
-            pair = ds.Pair(sent1, sent2, pair_counter, label)
-            pairs.append(pair)
-
-    return pairs
+    return labels
 
 
 def read_parses(path):
@@ -56,36 +50,36 @@ if __name__ == '__main__':
     parser.add_argument('trees', help='File with CONLLU dependency trees')
     parser.add_argument('vocabulary', help='Vocabulary file (corresponding to '
                                            'an embedding matrix)')
-    parser.add_argument('label_dict', help='Dictionary of dependency labels in '
-                                           'json format')
+    parser.add_argument('dep_dict', help='Dictionary of dependency labels in '
+                                         'json format')
     parser.add_argument('output', help='Path to save generated pairs as pickle')
     args = parser.parse_args()
 
-    pairs = read_pairs(args.snli)
+    labels = read_labels(args.snli)
     parses = read_parses(args.trees)
     wd = utils.load_vocabulary(args.vocabulary)
-    label_dict = utils.load_label_dict(args.label_dict)
+    dep_dict = utils.load_label_dict(args.dep_dict)
 
-    print('%d pairs and %d parses' % (len(pairs), len(parses)))
+    print('%d pairs and %d parses' % (len(labels), len(parses)))
 
-    for i, pair in enumerate(pairs):
-        if pair.entailment == '-':
-            pairs[i] = None
+    pairs = []
+    for i, label in enumerate(labels):
+        if label == '-':
             continue
 
-        pair.entailment = utils.map_entailment_string(pair.entailment)
+        label = utils.map_entailment_string(label)
 
         parse1 = parses[2*i]
-        sent1 = ds.Sentence(pair.t, parse1, wd, label_dict)
-        pair.annotated_t = sent1
+        sent1 = ds.Sentence(parse1, wd, dep_dict)
 
         parse2 = parses[2*i + 1]
-        sent2 = ds.Sentence(pair.h, parse2, wd, label_dict)
-        pair.annotated_h = sent2
+        sent2 = ds.Sentence(parse2, wd, dep_dict)
 
-        if i % 10000 == 0 or i == len(pairs) - 1:
+        pair = ds.Pair(sent1, sent2, label)
+        pairs.append(pair)
+
+        if i % 10000 == 0 or i == len(labels) - 1:
             print('Read %d pairs' % i)
 
-    pairs = [pair for pair in pairs if pair is not None]
     with open(args.output, 'wb') as f:
-        cPickle.dump(pairs, f)
+        cPickle.dump(pairs, f, -1)

@@ -21,6 +21,7 @@ from . import datastructures as ds
 
 
 UNKNOWN = '<unk>'
+EXTRA_EMBEDDINGS = 'extra-embeddings.npy'
 
 
 def print_cli_args():
@@ -208,8 +209,7 @@ def load_tsv(filename):
         for line in f:
             sent1, sent2, label, similarity = line.split('\t')
             entailment = map_entailment_string(label)
-            similarity = float(similarity)
-            pair = ds.Pair(sent1, sent2, None, entailment, similarity)
+            pair = ds.Pair(sent1, sent2, entailment)
             pairs.append(pair)
 
     return pairs
@@ -255,14 +255,8 @@ def load_xml(filename):
                 entailment = ds.Entailment.entailment
             else:
                 entailment = ds.Entailment.none
-            
-        if 'similarity' in attribs:
-            similarity = float(attribs['similarity']) 
-        else:
-            similarity = None
-        
-        id_ = int(attribs['id'])
-        pair = ds.Pair(t, h, id_, entailment, similarity)
+
+        pair = ds.Pair(t, h, entailment)
         pairs.append(pair)
     
     return pairs
@@ -387,7 +381,6 @@ def load_embeddings_and_dict(embeddings_path, normalize=True):
     :param normalize: whether to normalize embeddings
     :return: a tuple (defaultdict, array)
     """
-
     logging.debug('Loading embeddings')
     base_path, ext = os.path.splitext(embeddings_path)
     if ext.lower() == '.txt':
@@ -418,12 +411,23 @@ def load_embeddings_and_dict(embeddings_path, normalize=True):
     return wd, embeddings
 
 
-def load_embeddings(path_or_paths, add_vectors=None, dir_to_save=None):
+def get_embeddings_path(model_dir):
+    """
+    Return the path to the extra embeddings vectors
+
+    :param model_dir: path to the directory of the model
+    """
+    return os.path.join(model_dir, EXTRA_EMBEDDINGS)
+
+
+def load_embeddings(path_or_paths, normalize=True,
+                    add_vectors=None, dir_to_save=None):
     """
     Load an embedding model from the given path
 
     :param path_or_paths: path or list of paths to a numpy file. If a list,
         all of them will be concatenated in order.
+    :param normalize: normalize embeddings to have norm 1
     :param add_vectors: number of vectors to add to the embedding matrix. They
         will be generated randomly with mean and stdev from the others.
     :param dir_to_save: directory to save the newly generated vectors, if any
@@ -442,11 +446,14 @@ def load_embeddings(path_or_paths, add_vectors=None, dir_to_save=None):
         shape = [add_vectors, arrays[0].shape[1]]
         new_vectors = np.random.normal(mean, std, shape)
 
-        path = os.path.join(dir_to_save, 'extra-embeddings.npy')
+        path = os.path.join(dir_to_save, EXTRA_EMBEDDINGS)
         np.save(path, new_vectors)
         arrays.append(new_vectors)
 
     embeddings = np.concatenate(arrays)
+    if normalize:
+        embeddings = normalize_embeddings(embeddings)
+
     return embeddings
 
 
@@ -475,7 +482,7 @@ def create_tedin_dataset(pairs, label_dict):
 
         nodes1.append(t_indices)
         nodes2.append(h_indices)
-        labels.append(label_dict[pair.entailment.name])
+        labels.append(label_dict[pair.label.name])
 
     nodes1, _ = nested_list_to_array(nodes1, dim3=2)
     nodes2, _ = nested_list_to_array(nodes2, dim3=2)
