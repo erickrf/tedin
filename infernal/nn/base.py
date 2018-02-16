@@ -75,7 +75,7 @@ class Trainable(object):
         """
         Run the model for the given data.
 
-        :param feeds: Extra feeds with dropout, labels etc if applicable
+        :param feeds: Extra feeds with dropout, regularizer etc if applicable
         :param fetches: Tensors to fetch
         :param data: The input data
         :return: List with computed fecthes
@@ -161,8 +161,7 @@ class Trainable(object):
         self._init_validation(data)
         for _ in range(num_batches):
             batch = self._get_next_batch(data, batch_size, training=False)
-            feeds = self._create_data_feeds(batch)
-            values = self._run(feeds, self.validation_fetches, batch)
+            values = self._run({}, self.validation_fetches, batch)
 
             # multiply by len(batch) because the last batch may have a different
             # length

@@ -11,7 +11,7 @@ import numpy as np
 import tensorflow as tf
 
 from .base import TedinParameters, Trainable
-from ..datastructures import Dataset
+from ..datastructures import Dataset, Token
 from .. import utils
 
 # operation codes
@@ -46,7 +46,7 @@ def find_zss_operations(pair, insert_costs, remove_costs, update_costs):
         return remove_costs[node.id - 1]
 
     def get_update_cost(node1, node2):
-        if node1.id == node2.id and node1.dep_index == node2.dep_index:
+        if node1.index == node2.index and node1.dep_index == node2.dep_index:
             return 0
         return update_costs[node1.id - 1, node2.id - 1]
 
@@ -310,7 +310,7 @@ class TreeEditDistanceNetwork(Trainable):
         self.loss = tf.reduce_mean(cross_ent, name='loss')
 
         if create_optimizer:
-            optimizer = tf.train.AdagradOptimizer(self.learning_rate)
+            optimizer = tf.train.AdamOptimizer(self.learning_rate)
             self.train_op = optimizer.minimize(self.loss)
 
     def _convolution(self, inputs, lengths, reuse=False):
@@ -593,7 +593,7 @@ class TreeEditDistanceNetwork(Trainable):
     def _init_train_stats(self, params, report_interval):
         self._best_acc = 0
         self._accumulated_training_loss = 0
-        self._loss_denominator = params.batch_size * report_interval
+        self._loss_denominator = report_interval
 
     def _init_validation(self, data):
         self._accumulated_validation_loss = 0
@@ -630,5 +630,5 @@ class TreeEditDistanceNetwork(Trainable):
             self._best_acc = valid_acc
             msg += ' (saved model)'
 
-        self.logger.info(msg.format(train_data.epoch, step, train_acc,
+        print(msg.format(train_data.epoch, step, train_acc,
                                     train_loss, valid_acc, valid_loss))

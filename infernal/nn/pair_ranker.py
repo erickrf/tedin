@@ -53,7 +53,7 @@ class PairRanker(Trainable):
         tcl2 = self.tedin2.transformation_cost_loss
         self.loss = tf.reduce_mean(loss) + tcl1 + tcl2
 
-        optimizer = tf.train.AdagradOptimizer(self.learning_rate)
+        optimizer = tf.train.AdamOptimizer(self.learning_rate)
         self.train_op = optimizer.minimize(self.loss)
 
     def _create_base_training_feeds(self, params):
@@ -107,6 +107,8 @@ class PairRanker(Trainable):
     def _update_validation_stats(self, values, data):
         loss = values[0]
         pos_data, neg_data = data
+
+        # both datasets in the batch must have the same size at this point
         self._accumulated_validation_loss += loss * len(pos_data)
 
     def _get_validation_metrics(self, data):
