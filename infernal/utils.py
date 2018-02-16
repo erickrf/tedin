@@ -130,7 +130,7 @@ def load_pickled_pairs(path, add_inverted=False,
     if add_inverted:
         extra_pairs = []
         for pair in pairs:
-            if pair.entailment == ds.Entailment.paraphrase:
+            if pair.label == ds.Entailment.paraphrase:
                 ent_value = ds.Entailment.paraphrase
             else:
                 # inverting None and Entailment classes yields None
@@ -145,9 +145,9 @@ def load_pickled_pairs(path, add_inverted=False,
     count = 0
     if paraphrase_to_entailment:
         for pair in pairs:
-            if pair.entailment == ds.Entailment.paraphrase:
+            if pair.label == ds.Entailment.paraphrase:
                 count += 1
-                pair.entailment = ds.Entailment.entailment
+                pair.label = ds.Entailment.entailment
 
         logging.debug('Changed %d paraphrases to entailment' % count)
 
@@ -501,10 +501,10 @@ def split_positive_negative(pairs):
     :return: tuple (positives, negatives)
     """
     positive = [pair for pair in pairs
-                if pair.entailment == ds.Entailment.entailment
-                or pair.entailment == ds.Entailment.paraphrase]
+                if pair.label == ds.Entailment.entailment
+                or pair.label == ds.Entailment.paraphrase]
     neutrals = [pair for pair in pairs
-                if pair.entailment == ds.Entailment.none]
+                if pair.label == ds.Entailment.none]
 
     return positive, neutrals
 
@@ -532,7 +532,7 @@ def load_positive_and_negative_data(path, label_dict=None):
 
 
 def create_label_dict(pairs):
-    labels = set(pair.entailment.name for pair in pairs)
+    labels = set(pair.label.name for pair in pairs)
     label_dict = {label: i for i, label in enumerate(labels)}
     return label_dict
 

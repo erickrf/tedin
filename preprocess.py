@@ -23,6 +23,7 @@ def preprocess_pairs(pairs, wd, dep_dict, lower):
 
     :param pairs: list of `Pair` objects
     """
+    new_pairs = []
     for i, pair in enumerate(pairs):
         # tokens_t = tokenizer.tokenize(pair.t)
         # tokens_h = tokenizer.tokenize(pair.h)
@@ -30,20 +31,22 @@ def preprocess_pairs(pairs, wd, dep_dict, lower):
         # output_t = external.call_corenlp(' '.join(tokens_t))
         # output_h = external.call_corenlp(' '.join(tokens_h))
 
-        output_t = external.call_corenlp(pair.t)
-        output_h = external.call_corenlp(pair.h)
+        output_t = external.call_corenlp(pair.annotated_t)
+        output_h = external.call_corenlp(pair.annotated_h)
 
         try:
-            sent1 = ds.Sentence(pair.t, output_t, wd, dep_dict, lower)
-            sent2 = ds.Sentence(pair.h, output_h, wd, dep_dict, lower)
+            sent1 = ds.Sentence(output_t, wd, dep_dict, lower)
+            sent2 = ds.Sentence(output_h, wd, dep_dict, lower)
         except ValueError as e:
             tb = traceback.format_exc()
             logging.error('Error reading parser output:', e)
             logging.error(tb)
             raise
 
-        pair.annotated_t = sent1
-        pair.annotated_h = sent2
+        new_pair = ds.Pair(sent1, sent2, pair.label)
+        new_pairs.append(new_pair)
+
+    return new_pairs
 
 
 if __name__ == '__main__':
@@ -62,7 +65,7 @@ if __name__ == '__main__':
     wd = utils.load_vocabulary(args.vocabulary)
     dep_dict = utils.load_label_dict(args.dep_dict)
     pairs = utils.load_pairs(args.input)
-    preprocess_pairs(pairs, wd, dep_dict, args.lower)
+    pairs = preprocess_pairs(pairs, wd, dep_dict, args.lower)
 
     with open(args.output, 'wb') as f:
-        cPickle.dump(pairs, f)
+        cPickle.dump(pairs, f, -1)
