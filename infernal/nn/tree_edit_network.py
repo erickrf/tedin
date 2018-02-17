@@ -635,4 +635,4 @@ class TreeEditDistanceNetwork(Trainable):
             msg += ' (saved model)'
 
         print(msg.format(train_data.epoch, step, train_acc,
-                                    train_loss, valid_acc, valid_loss))
+                         train_loss, valid_acc, valid_loss))
