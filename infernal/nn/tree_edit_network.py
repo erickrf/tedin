@@ -461,7 +461,10 @@ class TreeEditDistanceNetwork(Trainable):
             hidden = tf.layers.dense(inputs, self.num_hidden_units, tf.nn.relu)
             hidden = tf.nn.dropout(hidden, self.dropout_keep)
 
-        return hidden
+            hidden2 = tf.layers.dense(hidden, self.num_hidden_units, tf.nn.relu)
+            hidden2 = tf.nn.dropout(hidden2, self.dropout_keep)
+
+        return hidden2
 
     def run_zss(self, batch, return_costs=False, return_operations=True):
         """
