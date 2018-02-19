@@ -532,6 +532,9 @@ def load_positive_and_negative_data(path, label_dict=None):
 
 
 def create_label_dict(pairs):
+    """
+    Create a dictionary mapping label names (entailment, none, etc) to integers
+    """
     labels = set(pair.label.name for pair in pairs)
     label_dict = {label: i for i, label in enumerate(labels)}
     return label_dict
