@@ -46,9 +46,9 @@ def word_overlap_proportion(pair, stopwords=None):
     return proportion_t, proportion_h
 
 
-def simple_tree_distance(pair):
+def simple_tree_distance(pair, return_operations=False):
     '''
-    Extract a simple tree edit distance (TED) value.
+    Extract a simple tree edit distance (TED) value and operations.
 
     Nodes are considered to match if they have the same dependency label and
     lemma.
@@ -69,7 +69,8 @@ def simple_tree_distance(pair):
     root_h = tree_h.root
 
     return zss.simple_distance(root_t, root_h, get_children,
-                               get_label, label_dist)
+                               get_label, label_dist,
+                               return_operations=return_operations)
 
 
 def word_synonym_overlap_proportion(pair, stopwords=None):

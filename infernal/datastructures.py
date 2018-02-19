@@ -68,7 +68,6 @@ class Dataset(object):
             # after this function is finished to repeat the ordering
             np.random.set_state(state)
             np.random.shuffle(array)
-            state = np.random.get_state()
 
     def _post_assignments(self):
         """
