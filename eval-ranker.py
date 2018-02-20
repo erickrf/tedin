@@ -19,7 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('data', help='Preprocessed pickled test pairs')
     args = parser.parse_args()
 
-    extra_embeddings_path = os.path.join(args.model, 'extra-embeddings.npy')
+    extra_embeddings_path = utils.get_embeddings_path(args.model)
     embeddings = utils.load_embeddings([args.embeddings, extra_embeddings_path])
     data = utils.load_positive_and_negative_data(args.data)
     ranker = nn.PairRanker.load(args.model, embeddings)
