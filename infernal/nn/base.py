@@ -6,7 +6,25 @@ import abc
 import os
 import math
 import tensorflow as tf
+import logging
 from six.moves import cPickle
+
+
+def print_parameters():
+    """
+    Count and print the number of trainable tensorflow parameters loaded in
+    the current graph.
+    """
+    total_params = 0
+    for variable in tf.trainable_variables():
+        shape = variable.get_shape()
+        variable_params = 1
+        for dim in shape:
+            variable_params *= dim.value
+        logging.info(
+            '%s: %s (%d params)' % (variable.name, shape, variable_params))
+        total_params += variable_params
+    return total_params
 
 
 class TedinParameters(tf.contrib.training.HParams):

@@ -49,4 +49,5 @@ if __name__ == '__main__':
                         'batch_size': args.batch,
                         'num_steps': args.steps}
     params.set_from_map(new_param_values)
+    nn.print_parameters()
     tedin.train(train_data, valid_data, args.model, args.eval_frequency)

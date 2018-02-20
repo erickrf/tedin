@@ -9,12 +9,10 @@ from __future__ import division, print_function, unicode_literals
 
 import argparse
 import logging
-import numpy as np
 import tensorflow as tf
 
 from infernal import utils
 from infernal import nn
-from infernal import datastructures as ds
 
 
 def print_variables():
@@ -74,4 +72,5 @@ if __name__ == '__main__':
 
     ranker = nn.PairRanker(params)
     ranker.initialize(embeddings)
+    nn.print_parameters()
     ranker.train(train_data, valid_data, args.model, args.eval_frequency)
