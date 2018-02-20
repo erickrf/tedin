@@ -178,5 +178,14 @@ class PairRanker(Trainable):
             memory
         :return: average loss
         """
+        # certify that both positive and negative data have the same number of
+        # items; if not, truncate to the smaller
+        pos_data, neg_data = data
+        if len(pos_data) != len(neg_data):
+            min_len = min(len(pos_data), len(neg_data))
+            pos_data = pos_data[:min_len]
+            neg_data = neg_data[:min_len]
+
+        data = (pos_data, neg_data)
         feeds = self._create_data_feeds(data)
         return self.session.run(self.loss, feeds)
