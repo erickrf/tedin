@@ -171,23 +171,36 @@ class Trainable(object):
             evaluated at once, which may not fit memory.
         :return: list with validation_fetches
         """
+        self._init_validation(data)
+        self._main_loop(data, self._update_validation_stats,
+                        self.validation_fetches, batch_size)
+
+        metrics = self._get_validation_metrics(data)
+        self._validation_report(metrics, saver, train_step, train_data,
+                                model_dir)
+
+    def _main_loop(self, data, accumulate_fn, fetches, batch_size=None):
+        """
+        Run a loop evaluating the fetches fed with data.
+
+        Each iteration of the loop corresponds to a chunk of batch_size. After
+        evaluating, accumulate_fn is called as f(computed_fetches, batch).
+
+        :param data: Dataset
+        :param accumulate_fn: function taking parameters values, batch
+        :param fetches: tensors to compute
+        :param batch_size: integer or None
+        """
         data_size = self._get_data_size(data)
         if batch_size is None or batch_size > data_size:
             batch_size = data_size
 
         num_batches = math.ceil(data_size / batch_size)
-        self._init_validation(data)
         for _ in range(num_batches):
             batch = self._get_next_batch(data, batch_size, training=False)
-            values = self._run({}, self.validation_fetches, batch)
+            values = self._run({}, fetches, batch)
 
-            # multiply by len(batch) because the last batch may have a different
-            # length
-            self._update_validation_stats(values, batch)
-
-        metrics = self._get_validation_metrics(data)
-        self._validation_report(metrics, saver, train_step, train_data,
-                                model_dir)
+            accumulate_fn(values, batch)
 
     @classmethod
     def get_base_file_name(cls, path):

@@ -169,7 +169,7 @@ class PairRanker(Trainable):
                     {ranker.tedin1.embedding_ph: embeddings})
         return ranker
 
-    def evaluate(self, data, batch_size=512):
+    def evaluate(self, data, batch_size=256):
         """
         Evaluate the model on the given dataset
 
@@ -187,5 +187,15 @@ class PairRanker(Trainable):
             neg_data = neg_data[:min_len]
 
         data = (pos_data, neg_data)
-        feeds = self._create_data_feeds(data)
-        return self.session.run(self.loss, feeds)
+        acc_loss = [0]
+
+        def accumulate(values, batch, acc_loss=acc_loss):
+            # workaround to persist values accross function call without
+            # setting an attribute
+            batch_loss = values[0]
+            acc_loss[0] += batch_loss * self._get_data_size(batch)
+
+        self._main_loop(data, accumulate, [self.loss], batch_size)
+        loss = acc_loss[0] / len(pos_data)
+
+        return loss
