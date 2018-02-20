@@ -420,6 +420,15 @@ def get_embeddings_path(model_dir):
     return os.path.join(model_dir, EXTRA_EMBEDDINGS)
 
 
+def get_vocabulary_path(embeddings_path):
+    """
+    Return the path of the vocabulary corresponding to the given embeddings
+
+    It just replaces the final .npy with .txt
+    """
+    return embeddings_path.replace('.npy', '.txt')
+
+
 def load_embeddings(path_or_paths, normalize=True,
                     add_vectors=None, dir_to_save=None):
     """
@@ -515,6 +524,8 @@ def load_positive_and_negative_data(path, label_dict=None):
     pairwise ranker.
 
     :param path: path to saved pairs in pickle format
+    :param label_dict: dictionary mapping RTE labels to integers or None
+        if None, one will be created
     :return: tuple of ds.Datasets (positive, negative)
     """
     pairs = load_pickled_pairs(path)
