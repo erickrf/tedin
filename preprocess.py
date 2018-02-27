@@ -11,7 +11,8 @@ import traceback
 import logging
 from six.moves import cPickle
 
-# from . import tokenizer
+from infernal import config
+from infernal import tokenizer
 from infernal import utils
 from infernal import external
 from infernal import datastructures as ds
@@ -24,15 +25,20 @@ def preprocess_pairs(pairs, wd, dep_dict, lower):
     :param pairs: list of `Pair` objects
     """
     new_pairs = []
+    parser_path = config.corenlp_depparse_path
+    pos_path = config.corenlp_pos_path
+
     for i, pair in enumerate(pairs):
-        # tokens_t = tokenizer.tokenize(pair.t)
-        # tokens_h = tokenizer.tokenize(pair.h)
+        tokens_t = tokenizer.tokenize(pair.annotated_t)
+        tokens_h = tokenizer.tokenize(pair.annotated_h)
 
-        # output_t = external.call_corenlp(' '.join(tokens_t))
-        # output_h = external.call_corenlp(' '.join(tokens_h))
+        output_t = external.call_corenlp(' '.join(tokens_t), parser_path,
+                                         pos_path)
+        output_h = external.call_corenlp(' '.join(tokens_h), parser_path,
+                                         pos_path)
 
-        output_t = external.call_corenlp(pair.annotated_t)
-        output_h = external.call_corenlp(pair.annotated_h)
+        # output_t = external.call_corenlp(pair.annotated_t)
+        # output_h = external.call_corenlp(pair.annotated_h)
 
         try:
             sent1 = ds.Sentence(output_t, wd, dep_dict, lower)

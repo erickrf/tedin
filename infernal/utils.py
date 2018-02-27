@@ -70,7 +70,13 @@ def nested_list_to_array(sequences, dtype=np.int32, dim3=None):
 def load_label_dict(path):
     """
     Load the label dictionary from a json file.
+
+    :param path: either a directory or the file name. In case it is a directory,
+        the default file name label-dict.json is used.
     """
+    if os.path.isdir(path):
+        path = os.path.join(path, 'label-dict.json')
+
     with open(path, 'r') as f:
         d = json.load(f)
 
@@ -551,7 +557,7 @@ def create_label_dict(pairs):
     return label_dict
 
 
-def load_data(path, label_dict=None):
+def load_tedin_data(path, label_dict=None):
     """
     Load a pickle file with pairs and return a dataset for the tedin model.
 
