@@ -32,8 +32,8 @@ def get_num_dep_labels(dataset):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('train', help='Training pairs')
-    parser.add_argument('valid', help='Validation pairs')
+    parser.add_argument('train', help='Training pairs (preprocessed pickle)')
+    parser.add_argument('valid', help='Validation pairs (same format)')
     parser.add_argument('embeddings', help='Numpy embeddings file')
     parser.add_argument('model', help='Directory to save model and logs')
     parser.add_argument('-l', help='Learning rate', type=float,

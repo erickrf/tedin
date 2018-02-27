@@ -37,8 +37,8 @@ if __name__ == '__main__':
     extra_path = utils.get_embeddings_path(args.model)
     embeddings = utils.load_embeddings([args.embeddings, extra_path])
 
-    train_data, label_dict = utils.load_data(args.train)
-    valid_data, _ = utils.load_data(args.valid, label_dict)
+    train_data, label_dict = utils.load_tedin_data(args.train)
+    valid_data, _ = utils.load_tedin_data(args.valid, label_dict)
     utils.write_label_dict(label_dict,
                            os.path.join(args.model, 'label-dict.json'))
 

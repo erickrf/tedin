@@ -274,11 +274,11 @@ class TreeEditDistanceNetwork(Trainable):
         Define the tensors related to the supervised classification of pairs
         """
         # all representations are (batch, max_ops, hidden_units)
-        rep_insert = self.get_operation_representation(
+        rep_insert = self._define_operation_representation(
             'insert', self.emb_insert)
-        rep_remove = self.get_operation_representation(
+        rep_remove = self._define_operation_representation(
             'remove', self.emb_remove)
-        rep_update = self.get_operation_representation(
+        rep_update = self._define_operation_representation(
             'update', self.emb_update1, self.emb_update2)
 
         # run separate convolutions on the 3 sequences and then take one single
@@ -411,8 +411,8 @@ class TreeEditDistanceNetwork(Trainable):
         :return: tensor with the shape of node1 without the last dimension:
             (batch, ...)
         """
-        op_representation = self.get_operation_representation(scope, node1,
-                                                              node2)
+        op_representation = self._define_operation_representation(scope, node1,
+                                                                  node2)
 
         scope = 'operation_cost'
         reuse = self.reuse_weights or (scope in self._initialized_weights)
@@ -432,7 +432,7 @@ class TreeEditDistanceNetwork(Trainable):
 
         return cost
 
-    def get_operation_representation(self, operation, node1, node2=None):
+    def _define_operation_representation(self, operation, node1, node2=None):
         """
         Compute the representation of an operation and involved arguments.
 
@@ -574,6 +574,26 @@ class TreeEditDistanceNetwork(Trainable):
         feed = {self.embedding_ph: embeddings}
         self.session.run([tf.global_variables_initializer(),
                           tf.local_variables_initializer()], feed)
+
+    def classify(self, data, batch_size=256):
+        """
+        Classify the given data
+
+        :param data: Dataset
+        :param batch_size: batch size to use when running. Important if the data
+            don't fit in the memory.
+        :return: 1d numpy array
+        """
+        self._answers = []
+
+        def accumulate(new_answers, batch):
+            self._answers.append(new_answers)
+
+        self._main_loop(data, accumulate, self.answers, batch_size)
+        answers = np.concatenate(self._answers)
+        del self._answers
+
+        return answers
 
     def _get_next_batch(self, data, batch_size, training):
         return data.next_batch(batch_size, wrap=training)
