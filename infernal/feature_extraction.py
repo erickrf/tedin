@@ -2,10 +2,10 @@
 
 from __future__ import unicode_literals, division
 
-'''
+"""
 Functions to extract features from the pairs, to be used by
 machine learning algorithms.
-'''
+"""
 
 import nltk
 import logging
@@ -21,13 +21,13 @@ from . import openwordnetpt as own
 
 
 def word_overlap_proportion(pair, stopwords=None):
-    '''
+    """
     Return the proportion of words in common appearing in H.
 
     :type pair: datastructures.Pair
     :type stopwords: set
     :return: the proportion of words in H that also appear in T
-    '''
+    """
     tokens_t = pair.annotated_t.tokens
     tokens_h = pair.annotated_h.tokens
 
@@ -46,13 +46,22 @@ def word_overlap_proportion(pair, stopwords=None):
     return proportion_t, proportion_h
 
 
+def cosine_tree_distance(pair):
+    """
+    Compute tree edit distance using the cosine distance between two words as
+    their replacement cost.
+
+    Cosine distance = 1 - cosine similarity
+    """
+
+
 def simple_tree_distance(pair, return_operations=False):
-    '''
-    Extract a simple tree edit distance (TED) value and operations.
+    """
+    Compute a simple tree edit distance (TED) value and operations.
 
     Nodes are considered to match if they have the same dependency label and
     lemma.
-    '''
+    """
     def get_children(node):
         return node.dependents
 
@@ -74,10 +83,10 @@ def simple_tree_distance(pair, return_operations=False):
 
 
 def word_synonym_overlap_proportion(pair, stopwords=None):
-    '''
+    """
     Like `word_overlap_proportion` but count wordnet synonyms
     as matches
-    '''
+    """
     if stopwords is None:
         stopwords = set()
 
@@ -99,7 +108,7 @@ def word_synonym_overlap_proportion(pair, stopwords=None):
 
 
 def soft_word_overlap(pair, embeddings):
-    '''
+    """
     Compute the "soft" word overlap between the sentences. It is
     defined as the average of the maximum embedding similarity of
     each word in one sentence in relation to the other.
@@ -112,7 +121,7 @@ def soft_word_overlap(pair, embeddings):
     :param pair: a Pair object
     :param embeddings: a utils.EmbeddingDictionary
     :return: return a tuple (similarity1, similarity2)
-    '''
+    """
     embeddings1 = np.array([embeddings[token]
                             for token in pair.annotated_t.lower_content_tokens])
     embeddings2 = np.array([embeddings[token]
@@ -137,13 +146,13 @@ def soft_word_overlap(pair, embeddings):
 
 
 def sentence_average_embeddings(pair, embeddings):
-    '''
+    """
     Concatenate embeddings of both sentences. Each sentence embedding is obtained
     as the average of their words.
 
     :param pair: ds.Pair
     :type embeddings: utils.EmbeddingDictionary
-    '''
+    """
     embeddings1 = embeddings.get_sentence_embeddings(pair.annotated_t)
     embeddings2 = embeddings.get_sentence_embeddings(pair.annotated_h)
     avg1 = embeddings1.mean(0)
@@ -153,14 +162,14 @@ def sentence_average_embeddings(pair, embeddings):
 
 
 def quantity_agreement(pair):
-    '''
+    """
     Check if quantities on t and h match.
 
     Only checks quantities modifying aligned heads. This returns 0 if there is a mismatch
     and 1 otherwise.
 
     :type pair: datastructures.Pair
-    '''
+    """
     for token_t, token_h in pair.lexical_alignments:
         # let's assume only one quantity modifier for each token
         # (honestly, how could there be more than one?)
@@ -187,13 +196,13 @@ def quantity_agreement(pair):
 
 
 def _is_negated(verb):
-    '''
+    """
     Check if a verb is negated in the syntactic tree. This function searches its
     direct syntactic children for a negation relation.
 
     :type verb: datastructures.Token
     :return: bool
-    '''
+    """
     for dependent in verb.dependents:
         if dependent.dependency_relation == config.negation_rel:
             return True
@@ -203,14 +212,14 @@ def _is_negated(verb):
 
 #TODO: this feature is weird. does it help at all?
 def matching_verb_arguments(pair, both=True):
-    '''
+    """
     Check if there is at least one verb matching in the two sentences and, if so,
     its object and subject are the same. In case of a positive result, return 1.
 
     :param both: if True, return a tuple with two values. The first is 1
     if T and H have the same subject, T has an object and H not. The second
     is 1 if both have the same subject, H has an object and T not.
-    '''
+    """
     at_least = None
 
     for token1, token2 in pair.lexical_alignments:
@@ -257,14 +266,14 @@ def matching_verb_arguments(pair, both=True):
 
 
 def dependency_overlap(pair, both=False):
-    '''
+    """
     Check how many of the dependencies on the pairs match. Return the ratio between
     dependencies in both sentences and those only in H (or also in T if `both`
     is True).
 
     :type pair: datastructures.Pair
     :param both: if True, return a tuple with the ratio to dependencies in T and H.
-    '''
+    """
     # dependencies are stored as a tuple of dependency label, head
     # and modifier.
     deps_t = set(pair.annotated_t.dependencies)
@@ -348,14 +357,14 @@ def length_proportion(pair):
 
 
 def negation_check(pair):
-    '''
+    """
      Check if a verb from H is negated in T. Negation is understood both as the
      verb itself negated by an adverb such as not or never, or by the presence
      of a non-negated antonym.
 
      :type pair: datastructures.Pair
      :return: 1 for negation, 0 otherwise
-    '''
+    """
     t = pair.annotated_t
     h = pair.annotated_h
 

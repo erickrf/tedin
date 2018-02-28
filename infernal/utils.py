@@ -472,12 +472,14 @@ def load_embeddings(path_or_paths, normalize=True,
     return embeddings
 
 
-def create_tedin_dataset(pairs, label_dict):
+def create_tedin_dataset(pairs, label_dict, use_weights=False):
     """
     Create a Dataset object to feed a Tedin model.
 
     :param pairs: list of parsed Pair objects
     :param label_dict: dictionary mapping labels to integers
+    :param use_weights: whether to use instance weights, inversely proportional
+        to the class frequency
     :return: Dataset
     """
     nodes1 = []
@@ -503,7 +505,8 @@ def create_tedin_dataset(pairs, label_dict):
     nodes2, _ = nested_list_to_array(nodes2, dim3=2)
     labels = np.array(labels)
 
-    dataset = ds.Dataset(pairs, nodes1, nodes2, labels)
+    dataset = ds.Dataset(pairs, nodes1, nodes2, labels=labels,
+                         use_weights=use_weights)
 
     return dataset
 
@@ -557,7 +560,7 @@ def create_label_dict(pairs):
     return label_dict
 
 
-def load_tedin_data(path, label_dict=None):
+def load_tedin_data(path, label_dict=None, use_weights=False):
     """
     Load a pickle file with pairs and return a dataset for the tedin model.
 
@@ -571,7 +574,7 @@ def load_tedin_data(path, label_dict=None):
     if label_dict is None:
         label_dict = create_label_dict(pairs)
 
-    data = create_tedin_dataset(pairs, label_dict)
+    data = create_tedin_dataset(pairs, label_dict, use_weights)
     return data, label_dict
 
 

@@ -139,6 +139,9 @@ class TreeEditDistanceNetwork(Trainable):
         # labels for the supervised training
         self.labels = tf.placeholder(tf.int32, [None], 'labels')
 
+        # weights used for each item when computing loss
+        self.item_weights = tf.placeholder(tf.float32, [None], 'item_weights')
+
         # operations applied to a sentence pair (batch, max_num_ops)
         self.operations = tf.placeholder(tf.int32, [None, None], 'operations')
 
@@ -310,7 +313,8 @@ class TreeEditDistanceNetwork(Trainable):
         hits = tf.equal(tf.cast(self.answers, tf.int32), self.labels)
         self.accuracy = tf.reduce_mean(tf.cast(hits, tf.float32))
 
-        cross_ent = tf.losses.sparse_softmax_cross_entropy(self.labels, logits)
+        cross_ent = tf.losses.sparse_softmax_cross_entropy(
+            self.labels, logits, self.item_weights)
         self.loss = tf.reduce_mean(cross_ent, name='loss')
 
         if create_optimizer:
@@ -561,6 +565,8 @@ class TreeEditDistanceNetwork(Trainable):
         operations = self.run_zss(batch)
         feeds = self.create_feeds_from_operations(operations)
         feeds[self.labels] = batch.labels
+        feeds[self.item_weights] = batch.weights
+
         return feeds
 
     def initialize(self, embeddings):

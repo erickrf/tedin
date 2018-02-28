@@ -9,7 +9,7 @@ This module contains data structures used by the related scripts.
 import six
 from enum import Enum
 import numpy as np
-from collections import namedtuple
+from collections import namedtuple, Counter
 
 
 def _compat_repr(repr_string, encoding='utf-8'):
@@ -29,7 +29,8 @@ class Dataset(object):
     Class for storing data in the format used by TEDIN models.
     """
 
-    def __init__(self, pairs, nodes1, nodes2, labels=None):
+    def __init__(self, pairs, nodes1, nodes2, weights=None, labels=None,
+                 use_weights=False):
         """
         Create a Dataset
 
@@ -40,6 +41,9 @@ class Dataset(object):
         :param nodes2: numpy array (num_pairs, max_len, num_inds)
         :param labels: numpy array (num_pairs) or None (this is the target
             class)
+        :param weights: the weight for each instance
+        :param use_weights: compute weights for each instance inversely
+            proportional to the frequency of its class
         """
         self.pairs = pairs
         self.nodes1 = nodes1
@@ -47,7 +51,29 @@ class Dataset(object):
         self.labels = labels
         self.last_batch_index = 0
         self.epoch = 1
+
+        if weights is not None:
+            self.weights = weights
+        elif use_weights:
+            weight_dict = self._compute_class_weights()
+            self.weights = np.array([weight_dict[label]
+                                     for label in labels], np.float32)
+        else:
+            self.weights = np.ones_like(labels, np.float32)
+
         self._post_assignments()
+
+    def _compute_class_weights(self):
+        """
+        Compute the class weights inversally proportional to its frequency
+
+        :return: a dictionary mapping each class to a float weight
+        """
+        c = Counter(self.labels)
+        max_freq = max(c.values())
+        weights = {class_: max_freq / c[class_] for class_ in c}
+
+        return weights
 
     def reset_batch_counter(self):
         """
@@ -76,7 +102,8 @@ class Dataset(object):
         self.num_items = len(self.nodes1)
 
         # variables in the order they are given in the constructor
-        self._ordered_variables = [self.pairs, self.nodes1, self.nodes2]
+        self._ordered_variables = [self.pairs, self.nodes1,
+                                   self.nodes2, self.weights]
         if self.labels is not None:
             self._ordered_variables.append(self.labels)
 
@@ -94,6 +121,7 @@ class Dataset(object):
         self.pairs.extend(dataset.pairs)
         self.nodes1 = np.concatenate([self.nodes1, dataset.nodes1])
         self.nodes2 = np.concatenate([self.nodes2, dataset.nodes2])
+        self.weights = np.concatenate([self.weights, dataset.weights])
         if self.labels is not None:
             self.labels = np.concatenate([self.labels, dataset.labels])
         self._post_assignments()
