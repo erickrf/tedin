@@ -33,6 +33,9 @@ if __name__ == '__main__':
     parser.add_argument('--label-weights', action='store_true',
                         dest='use_weights', help='Use label weights to counter '
                                                  'class imbalance')
+    parser.add_argument('--load-label-dict', action='store_true',
+                        help='Load label dictionary from the model directory',
+                        dest='load_label_dict')
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
@@ -41,7 +44,12 @@ if __name__ == '__main__':
     extra_path = utils.get_embeddings_path(args.model)
     embeddings = utils.load_embeddings([args.embeddings, extra_path])
 
-    train_data, label_dict = utils.load_tedin_data(args.train,
+    if args.load_label_dict:
+        label_dict = utils.load_label_dict(args.model)
+    else:
+        label_dict = None
+
+    train_data, label_dict = utils.load_tedin_data(args.train, label_dict,
                                                    use_weights=args.use_weights)
     valid_data, _ = utils.load_tedin_data(args.valid, label_dict)
     utils.write_label_dict(label_dict,
