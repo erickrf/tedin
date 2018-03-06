@@ -2,22 +2,25 @@
 
 from __future__ import unicode_literals
 
-'''
+"""
 This module contains data structures used by the related scripts.
-'''
+"""
 
 import six
 from enum import Enum
 import numpy as np
-from collections import namedtuple, Counter
+from collections import Counter
+
+from infernal import lemmatization
+from infernal import openwordnetpt as own
 
 
 def _compat_repr(repr_string, encoding='utf-8'):
-    '''
+    """
     Function to provide compatibility with Python 2 and 3 with the __repr__
     function. In Python 2, return a encoded version. In Python 3, return
     a unicode object. 
-    '''
+    """
     if six.PY2:
         return repr_string.encode(encoding)
     else:
@@ -163,68 +166,204 @@ class Entailment(Enum):
     contradiction = 4
 
 
-Pair = namedtuple('Pair', ['annotated_t', 'annotated_h', 'label'])
+class Pair(object):
+    """
+    Class representing a pair of texts from SICK or RTE.
+    It is meant to be used as an abstract representation for both.
+    """
+    def __init__(self, t, h, id_, entailment, similarity=None):
+        """
+        :param t: the first sentence as a string
+        :param h: the second sentence as a string
+        :param id_: the id in the dataset. not very important
+        :param entailment: instance of the Entailment enum
+        :param similarity: similarity score as a float
+        """
+        self.t = t
+        self.h = h
+        self.id = id_
+        self.lexical_alignments = None
+        self.ppdb_alignments = None
+        self.entailment = entailment
+        self.annotated_h = None
+        self.annotated_t = None
+
+        if similarity is not None:
+            self.similarity = similarity
+
+    def inverted_pair(self):
+        """
+        Return an inverted version of this pair; i.e., exchange the
+        first and second sentence, as well as the associated information.
+        """
+        if self.entailment == Entailment.paraphrase:
+            entailment_value = Entailment.paraphrase
+        else:
+            entailment_value = Entailment.none
+
+        p = Pair(self.h, self.t, self.id, entailment_value, self.similarity)
+        p.annotated_t = self.annotated_h
+        p.annotated_h = self.annotated_t
+        return p
 
 
 class Token(object):
-    '''
+    """
     Simple data container class representing a token and its linguistic
     annotations.
-    '''
-    __slots__ = 'id', 'index', 'dep_index', 'dependents', 'head'
+    """
+    __slots__ = ['id', 'text', 'pos', 'lemma', 'head', 'dependents',
+                 'dependency_relation']
 
-    def __init__(self, num, index, dep_index):
+    def __init__(self, num, text, pos=None, lemma=None):
         self.id = num  # sequential id in the sentence
-        self.index = index
-        self.dep_index = dep_index
+        self.text = text
+        self.pos = pos
+        self.lemma = lemma
         self.dependents = []
+        self.dependency_relation = None
 
-        # Token.head points to another token, not an id
+        # Token.head points to another token, not an index
         self.head = None
 
     def __repr__(self):
-        repr_str = '<Token %s, Dep rel=%s>' % (self.index, self.dep_index)
+        repr_str = '<Token %s, Dep rel=%s>' % (self.text,
+                                               self.dependency_relation)
         return _compat_repr(repr_str)
 
     def __str__(self):
-        return _compat_repr('Token %d' % self.index)
+        return _compat_repr(self.text)
+
+    def get_dependent(self, relation, error_if_many=False):
+        """
+        Return the modifier (syntactic dependents) that has the specified
+        dependency relation. If `error_if_many` is true and there is more
+        than one have the same relation, it raises a ValueError. If there
+        are no dependents with this relation, return None.
+
+        :param relation: the name of the dependency relation
+        :param error_if_many: whether to raise an exception if there is
+            more than one value
+        :return: Token
+        """
+        deps = [dep for dep in self.dependents
+                if dep.dependency_relation == relation]
+
+        if len(deps) == 0:
+            return None
+        elif len(deps) == 1 or not error_if_many:
+            return deps[0]
+        else:
+            msg = 'More than one dependent with relation {} in token {}'.\
+                format(relation, self)
+            raise ValueError(msg)
+
+    def get_dependents(self, relation):
+        """
+        Return modifiers (syntactic dependents) that have the specified dependency
+        relation.
+
+        :param relation: the name of the dependency relation
+        """
+        deps = [dep for dep in self.dependents
+                if dep.dependency_relation == relation]
+
+        return deps
 
 
 class ConllPos(object):
-    '''
+    """
     Dummy class to store field positions in a CoNLL-like file
     for dependency parsing. NB: The positions are different from
     those used in SRL!
-    '''
+    """
     id = 0
     word = 1
     lemma = 2
     pos = 3
     pos2 = 4
     morph = 5
-    dep_head = 6 # dependency head
-    dep_rel = 7 # dependency relation
+    dep_head = 6  # dependency head
+    dep_rel = 7  # dependency relation
+
+
+class Dependency(object):
+    """
+    Class to store data about a dependency relation and provide
+    methods for comparison
+    """
+    __slots__ = 'label', 'head', 'dependent'
+
+    def __init__(self, label, head, dependent):
+        self.label = label
+        self.head = head
+        self.dependent = dependent
+
+    def get_data(self):
+        head = self.head.lemma if self.head else None
+        return self.label, head, self.dependent.lemma
+
+    def __repr__(self):
+        s = '{}({}, {})'.format(*self.get_data())
+        return _compat_repr(s)
+
+    def __hash__(self):
+        return hash(self.get_data())
+
+    def __eq__(self, other):
+        """
+        Check if the lemmas of head and modifier are the same across
+        two Dependency objects.
+        """
+        if not isinstance(other, Dependency):
+            return False
+        return self.get_data() == other.get_data()
+
+    def is_equivalent(self, other):
+        """
+        Return True if this dependency and the other have the same label and
+        their three components either have the same lemma or are synonyms.
+
+        :param other: another dependency instance
+        :return: boolean
+        """
+        if self.label != other.label:
+            return False
+
+        lemma1 = self.head.lemma
+        lemma2 = other.head.lemma
+        if lemma1 != lemma2 and not own.are_synonyms(lemma1, lemma2):
+            return False
+
+        lemma1 = self.dependent.lemma
+        lemma2 = other.dependent.lemma
+        if lemma1 != lemma2 and not own.are_synonyms(lemma1, lemma2):
+            return False
+
+        return True
 
 
 class Sentence(object):
-    '''
+    """
     Class to store a sentence with linguistic annotations.
-    '''
-    __slots__ = 'tokens', 'root'
+    """
+    __slots__ = 'tokens', 'root', 'lower_content_tokens', 'dependencies'
 
-    def __init__(self, parser_output, word_dict, dep_dict, lower=False):
-        '''
+    def __init__(self, parser_output):
+        """
         Initialize a sentence from the output of one of the supported parsers. 
         It checks for the tokens themselves, pos tags, lemmas
         and dependency annotations.
 
         :param parser_output: if None, an empty Sentence object is created.
-        :param word_dict: dictionary mapping words to integers
-        :param dep_dict: dictionary mapping dependency relations to integers
         :param lower: whether to convert tokens to lower case
-        '''
+        """
         self.tokens = []
-        self._read_conll_output(parser_output, word_dict, dep_dict, lower)
+        self.dependencies = []
+        self.root = None
+        self.lower_content_tokens = []
+        self._read_conll_output(parser_output)
+        self._extract_dependency_tuples()
 
     def __str__(self):
         return ' '.join(str(t) for t in self.tokens)
@@ -232,11 +371,58 @@ class Sentence(object):
     def __repr__(self):
         repr_str = str(self)
         return _compat_repr(repr_str)
-    
-    def _read_conll_output(self, conll_output, word_dict, dep_dict, lower):
+
+    def _extract_dependency_tuples(self):
         '''
+        Extract dependency tuples in the format relation(token1, token2)
+        from the sentence tokens.
+
+        These tuples are stored in the sentence object as namedtuples
+        (relation, head, modifier). They are stored in a set, so duplicates will
+        be lost.
+        '''
+        self.dependencies = []
+        # TODO: use collapsed dependencies (collapse preposition and/or conjunctions)
+        for token in self.tokens:
+            # ignore punctuation dependencies
+            relation = token.dependency_relation
+            if relation == 'p':
+                continue
+
+            head = token.head
+            dep = Dependency(relation, head, token)
+            self.dependencies.append(dep)
+
+    def structure_representation(self):
+        """
+        Return a CoNLL representation of the sentence's syntactic structure.
+        """
+        lines = []
+        for token in self.tokens:
+            head = token.head.id if token.head is not None else 0
+            lemma = token.lemma if token.lemma is not None else '_'
+            line = '{token.id}\t\t{token.text}\t\t{lemma}\t\t{token.pos}\t\t' \
+                   '{head}\t\t{token.dependency_relation}'
+            line = line.format(token=token, lemma=lemma, head=head)
+            lines.append(line)
+
+        return '\n'.join(lines)
+
+    def find_lower_content_tokens(self, stopwords):
+        '''
+        Store the lower case content tokens (i.e., not in stopwords) for faster
+        processing.
+
+        :param stopwords: set
+        '''
+        self.lower_content_tokens = [token.text.lower()
+                                     for token in self.tokens
+                                     if token.lemma not in stopwords]
+
+    def _read_conll_output(self, conll_output):
+        """
         Internal function to load data in conll dependency parse syntax.
-        '''
+        """
         lines = conll_output.splitlines()
         sentence_heads = []
         
@@ -247,18 +433,24 @@ class Sentence(object):
 
             id_ = int(fields[ConllPos.id])
             word = fields[ConllPos.word]
-            if lower:
-                word = word.lower()
-            index = word_dict[word]
+            pos = fields[ConllPos.pos]
+            if pos == '_':
+                # some systems output the POS tag in the second column
+                pos = fields[ConllPos.pos2]
+
+            lemma = fields[ConllPos.lemma]
+            if lemma == '_':
+                lemma = lemmatization.get_lemma(word, pos)
 
             head = int(fields[ConllPos.dep_head])
             dep_rel = fields[ConllPos.dep_rel]
-            dep_index = dep_dict[dep_rel]
             
             # -1 because tokens are numbered from 1
             head -= 1
             
-            token = Token(id_, index, dep_index)
+            token = Token(id_, word, pos, lemma)
+            token.dependency_relation = dep_rel
+
             self.tokens.append(token)
             sentence_heads.append(head)
             

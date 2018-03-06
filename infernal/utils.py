@@ -2,9 +2,9 @@
 
 from __future__ import unicode_literals
 
-'''
+"""
 Utility functions
-'''
+"""
 
 import sys
 from six.moves import cPickle
@@ -20,8 +20,56 @@ from . import config
 from . import datastructures as ds
 
 
+content_word_tags = {'NOUN', 'VERB', 'ADJ', 'ADV', 'PNOUN'}
 UNKNOWN = '<unk>'
 EXTRA_EMBEDDINGS = 'extra-embeddings.npy'
+
+
+class EmbeddingDictionary(object):
+    """
+    Class for storing a word dictionary to embeddings. It treats special
+    cases of OOV words.
+    """
+    def __init__(self, vocabulary_path, embeddings_path,
+                 add_new_vectors=None, path_to_save_extra=None):
+        """
+        Create a new EmbeddingDictionary.
+
+        :param vocabulary_path: path to vocabulary
+        :param embeddings_path: path or paths to 2-d numpy array
+        :param add_new_vectors: number of extra embeddings vectors to create, if
+            any
+        :param path_to_save_extra: path to save the newly created vectors, if
+            any
+        """
+        logging.info('Reading embeddings...')
+
+        # an extra OOV embedding is added to the embeddings. if there was
+        # already one and a corresponding <unk> key in wd, the existing one
+        # will be used
+        self.wd = load_vocabulary(vocabulary_path)
+        self.embeddings = load_embeddings(embeddings_path, True,
+                                          add_new_vectors, path_to_save_extra)
+
+    def __getitem__(self, item):
+        return self.embeddings[self.wd[item]]
+
+    def get_oov_vector(self):
+        return self.embeddings[self.wd[UNKNOWN]]
+
+    def set_oov_vector(self, vector):
+        self.embeddings[self.wd[UNKNOWN]] = vector
+
+    def get_vectors(self, tokens):
+        """
+        Return an array with the embeddings of each token in the sentence
+
+        :param tokens: sequence of strings
+        :return: numpy array (num_tokens, embedding_size)
+        :rtype: np.ndarray
+        """
+        indices = [self.wd[token] for token in tokens]
+        return self.embeddings[indices]
 
 
 def print_cli_args():
@@ -119,7 +167,7 @@ def assign_word_indices(pairs, wd, lower=True):
 
 def load_pickled_pairs(path, add_inverted=False,
                        paraphrase_to_entailment=False):
-    '''
+    """
     Load pickled pairs from the given path.
 
     :param path: pickle file path
@@ -127,7 +175,7 @@ def load_pickled_pairs(path, add_inverted=False,
     :param paraphrase_to_entailment: change paraphrase class to
         entailment
     :return: list of pairs
-    '''
+    """
     logging.info('Reading pairs...')
     with open(path, 'rb') as f:
         pairs = cPickle.load(f)
@@ -184,12 +232,12 @@ def load_vocabulary(path):
 
 
 def load_pairs(filename):
-    '''
+    """
     Read the pairs from the given file.
 
     :param filename: either a TSV or an XML file
     :return: list of pairs
-    '''
+    """
     lower_filename = filename.lower()
     if lower_filename.endswith('.tsv'):
         return load_tsv(filename)
@@ -202,14 +250,14 @@ def load_pairs(filename):
 
 
 def load_tsv(filename):
-    '''
+    """
     Read a TSV file with the format, as used in the SICK corpus.
 
     sentence1 [TAB] sentence2 [TAB] label [TAB] similarity
 
     :param filename: path to a tsv file
     :return: list of pairs
-    '''
+    """
     pairs = []
     with open(filename, 'r') as f:
         for line in f:
@@ -239,9 +287,9 @@ def map_entailment_string(ent_string):
 
 
 def load_xml(filename):
-    '''
+    """
     Read an RTE XML file and return a list of Pair objects.
-    '''
+    """
     pairs = []
     tree = ET.parse(filename)
     root = tree.getroot()
@@ -269,11 +317,11 @@ def load_xml(filename):
 
 
 def write_rte_file(filename, pairs, **attribs):
-    '''
+    """
     Write an XML file containing the given RTE pairs.
     
     :param pairs: list of Pair objects
-    '''
+    """
     root = ET.Element('entailment-corpus')
     for i, pair in enumerate(pairs, 1):
         xml_attribs = {'id':str(i)}
@@ -296,9 +344,9 @@ def write_rte_file(filename, pairs, **attribs):
 
 
 def train_classifier(x, y):
-    '''
+    """
     Train and return a classifier with the supplied data
-    '''
+    """
     classifier = config.classifier_class(class_weight='auto')
     classifier.fit(x, y)
     
@@ -306,9 +354,9 @@ def train_classifier(x, y):
 
 
 def train_regressor(x, y):
-    '''
+    """
     Train and return a regression model (for similarity) with the supplied data.
-    '''
+    """
     regressor = config.regressor_class()
     regressor.fit(x, y)
     
