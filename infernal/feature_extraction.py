@@ -20,59 +20,6 @@ from . import config
 from . import openwordnetpt as own
 
 
-def _is_negated(verb):
-    """
-    Check if a verb is negated in the syntactic tree. This function searches its
-    direct syntactic children for a negation relation.
-
-    :type verb: datastructures.Token
-    :return: bool
-    """
-    for dependent in verb.dependents:
-        if dependent.dependency_relation == config.negation_rel:
-            return True
-
-    return False
-
-
-def _count_dependency_matches(deps1, deps2):
-    """
-    Checks how many of the deps1 have a matching dependency in deps2
-
-    :param deps1: list or set of Dependency objects
-    :param deps2: list or set of Dependency objects
-    :return: integer
-    """
-    matches = 0
-    for dep1 in deps1:
-        for dep2 in deps2:
-            if dep1.is_equivalent(dep2):
-                matches += 1
-                break
-
-    return matches
-
-
-def _has_nominalization(sent1, sent2):
-    """
-    Internal helper function. Returns 1 if a verb in sent 1 has a nominalization
-    in sent2, 0 otherwise.
-    :param sent1: datastructures.Sentence
-    :param sent2: datastructures.Sentence
-    """
-    verbs1 = [token.lemma for token in sent1.tokens if token.pos == 'VERB']
-    # lemmas2 = set(token.lemma for token in sent2.tokens)
-    for verb in verbs1:
-        nominalizations = own.find_nominalizations(verb)
-        for nominalization in nominalizations:
-            for token2 in sent2.tokens:
-                if token2.lemma == nominalization and \
-                                token2.dependency_relation == 'dobj':
-                    return 1
-
-    return 0
-
-
 class FeatureExtractor(object):
     """
     Class to extract features from pairs.
@@ -90,8 +37,48 @@ class FeatureExtractor(object):
             stopwords = set()
         self.stopwords = stopwords
 
-    def extract_features(self, pair):
+        self.feature_functions = [self.bleu,
+                                  self.cosine_tree_distance,
+                                  self.dependency_overlap,
+                                  self.has_nominalization,
+                                  self.length_proportion,
+                                  self.matching_verb_arguments,
+                                  self.negation_check,
+                                  self.quantity_agreement,
+                                  self.sentence_cosine,
+                                  self.simple_tree_distance,
+                                  self.soft_word_overlap,
+                                  self.word_overlap_proportion,
+                                  self.word_synonym_overlap_proportion]
+
+    def get_feature_names(self):
+        """
+        Return a list with the names of the features extracted.
+        """
+        names = [f(None, name=True) for f in self.feature_functions]
+        names = flatten(names)
+
+        return names
+
+    def extract_dataset_features(self, pairs):
+        """
+        Extract features from the given list of pairs and return a numpy
+        2d array
+        """
+        arrays = [self.extract_pair_features(pair) for pair in pairs]
+        return np.array(arrays)
+
+    def extract_pair_features(self, pair):
+        """
+        Extract features from the given pair and return a numpy array.
+        """
         self._compute_common_values(pair)
+        features = [f(pair) for f in self.feature_functions]
+
+        # some functions return tuples, others returns scalars
+        features = np.array(flatten(features))
+
+        return features
 
     def _compute_common_values(self, pair):
         """
@@ -100,7 +87,6 @@ class FeatureExtractor(object):
         tokens_t = pair.annotated_t.tokens
         tokens_h = pair.annotated_h.tokens
 
-        self.distances = None
         self.content_tokens_t = [token for token in tokens_t
                                  if token.lemma not in self.stopwords]
         self.content_lemma_set_t = set(token.lemma
@@ -117,12 +103,15 @@ class FeatureExtractor(object):
         self.cosine_distances = cdist(self.embeddings_t, self.embeddings_h,
                                       'cosine')
 
-    def word_overlap_proportion(self):
+    def word_overlap_proportion(self, pair, name=False):
         """
         Return the proportion of words in common appearing in H.
 
         :return: the proportion of words in H that also appear in T
         """
+        if name:
+            return 'Overlap T', 'Overlap H'
+
         # TODO: sets instead of lists?
         num_lemmas_t = len(self.content_lemma_set_t)
         num_lemmas_h = len(self.content_lemma_set_h)
@@ -135,13 +124,17 @@ class FeatureExtractor(object):
 
         return proportion_t, proportion_h
 
-    def cosine_tree_distance(self, pair, return_operations=False):
+    def cosine_tree_distance(self, pair, name=False):
         """
         Compute the tree edit distance of the sentences considering the
         replacement cost of two words as their embeddings's cosine distance.
 
         :return: an integer
         """
+        if name:
+            return ('Cosine TED', 'Cosine TED / Length T',
+                    'Cosine TED / Length H')
+
         def get_children(node):
             return node.dependents
 
@@ -162,18 +155,24 @@ class FeatureExtractor(object):
         tree_h = pair.annotated_h
         root_t = tree_t.root
         root_h = tree_h.root
+        size_t = len(tree_t.tokens)
+        size_h = len(tree_h.tokens)
 
-        return zss.distance(root_t, root_h, get_children, insert_cost,
-                            remove_cost, update_cost,
-                            return_operations=return_operations)
+        distance = zss.distance(root_t, root_h, get_children, insert_cost,
+                                remove_cost, update_cost)
 
-    def simple_tree_distance(self, pair, return_operations=False):
+        return distance, distance / size_t, distance / size_h
+
+    def simple_tree_distance(self, pair, name=False):
         """
         Compute a simple tree edit distance (TED) value and operations.
 
         Nodes are considered to match if they have the same dependency label and
         lemma.
         """
+        if name:
+            return 'Simple TED', 'TED / Length T', 'TED / Length H'
+
         def get_children(node):
             return node.dependents
 
@@ -187,16 +186,22 @@ class FeatureExtractor(object):
         tree_h = pair.annotated_h
         root_t = tree_t.root
         root_h = tree_h.root
+        size_t = len(tree_t.tokens)
+        size_h = len(tree_h.tokens)
 
-        return zss.simple_distance(root_t, root_h, get_children,
-                                   get_label, label_dist,
-                                   return_operations=return_operations)
+        distance = zss.simple_distance(root_t, root_h, get_children,
+                                       get_label, label_dist)
 
-    def word_synonym_overlap_proportion(self, pair):
+        return distance, distance / size_t, distance / size_h
+
+    def word_synonym_overlap_proportion(self, pair, name=False):
         """
         Like `word_overlap_proportion` but count wordnet synonyms
         as matches
         """
+        if name:
+            return 'Synonym Overlap T', 'Synonym Overlap H'
+
         alignments = [(token1, token2)
                       for token1, token2 in pair.lexical_alignments
                       if token1.lemma not in self.stopwords
@@ -211,7 +216,7 @@ class FeatureExtractor(object):
 
         return proportion_t, proportion_h
 
-    def soft_word_overlap(self):
+    def soft_word_overlap(self, pair, name=False):
         """
         Compute the "soft" word overlap between the sentences. It is
         defined as the average of the maximum embedding similarity of
@@ -224,10 +229,16 @@ class FeatureExtractor(object):
 
         :return: return a tuple (similarity1, similarity2)
         """
-        content_token_ids_t = [token.id - 1 for token in self.content_tokens_t]
-        content_token_ids_h = [token.id - 1 for token in self.content_tokens_h]
+        if name:
+            if self.both:
+                return 'Soft Overlap T->H', 'Soft Overlap H->T'
+            else:
+                return 'Soft Overlap H->T'
 
-        dists = self.cosine_distances[content_token_ids_t, content_token_ids_h]
+        ids_t = [token.id - 1 for token in self.content_tokens_t]
+        ids_h = [token.id - 1 for token in self.content_tokens_h]
+
+        dists = self.cosine_distances[ids_t][:, ids_h]
 
         # dists has shape (num_tokens1, num_tokens2)
         # min_dists1 has the minimum distance from each word in T to any in H
@@ -249,12 +260,16 @@ class FeatureExtractor(object):
 
         return mean2
 
-    def sentence_cosine(self):
+    def sentence_cosine(self, pair, name=False):
         """
         Compute the cosine of the mean embedding vector of the two sentences.
 
         :return: an integer, the cosine similarity
         """
+        if name:
+            return 'Sentence Cosine'
+
+        # TODO: weight by IDF
         avg1 = self.embeddings_t.mean(0)
         avg2 = self.embeddings_h.mean(0)
 
@@ -265,7 +280,7 @@ class FeatureExtractor(object):
 
         return cos_similarity
 
-    def quantity_agreement(self, pair):
+    def quantity_agreement(self, pair, name=False):
         """
         Check if quantities on t and h match.
 
@@ -274,6 +289,9 @@ class FeatureExtractor(object):
 
         :type pair: datastructures.Pair
         """
+        if name:
+            return 'Quantity Agreement'
+
         for token_t, token_h in pair.lexical_alignments:
             # let's assume only one quantity modifier for each token
             # (honestly, how could there be more than one?)
@@ -299,7 +317,7 @@ class FeatureExtractor(object):
         return 1
 
     #TODO: this feature is weird. does it help at all?
-    def matching_verb_arguments(self, pair):
+    def matching_verb_arguments(self, pair, name=False):
         """
         Check if there is at least one verb matching in the two sentences and, if
         so, its object and subject are the same. In case of a positive result,
@@ -309,6 +327,12 @@ class FeatureExtractor(object):
         if T and H have the same subject, T has an object and H not. The second
         is 1 if both have the same subject, H has an object and T not.
         """
+        if name:
+            if self.both:
+                return 'Verb Structure T->H', 'Verb Structure H->T'
+            else:
+                return 'Verb Structure T->H'
+
         at_least = None
 
         for token1, token2 in pair.lexical_alignments:
@@ -353,7 +377,7 @@ class FeatureExtractor(object):
 
         return (0, 0) if self.both else 0
 
-    def dependency_overlap(self, pair):
+    def dependency_overlap(self, pair, name=False):
         """
         Check how many of the dependencies on the pairs match. Return the ratio
         between dependencies in both sentences and those only in H (or also in T
@@ -361,6 +385,11 @@ class FeatureExtractor(object):
 
         :type pair: datastructures.Pair
         """
+        if name:
+            if self.both:
+                return 'Depedency Overlap T', 'Depedency Overlap H'
+            else:
+                return 'Dependency Overlap H'
         # dependencies are stored as a tuple of dependency label, head
         # and modifier.
         deps_t = set(pair.annotated_t.dependencies)
@@ -377,29 +406,40 @@ class FeatureExtractor(object):
 
         return ratio_h
 
-    def has_nominalization(self, pair):
+    def has_nominalization(self, pair, name=False):
         """
         Check whether a verb in T has a corresponding nominalization in H.
         If so, return 1.
 
         :type pair: datastructures.Pair
-        :param both: if True, also check verbs in H with nouns in T.
         """
+        if name:
+            if self.both:
+                return 'Nominalization in H', 'Nominalization in T'
+            else:
+                return 'Nominalization in H'
+
         sent1 = pair.annotated_t
         sent2 = pair.annotated_h
         val1 = _has_nominalization(sent1, sent2)
 
+        #TODO combine both with and OR logic function?
         if self.both:
             val2 = _has_nominalization(sent2, sent1)
             return val1, val2
         else:
             return val1
 
-    def bleu(self, pair):
+    def bleu(self, pair, name=False):
         """
         Return the BLEU score from the first sentence to the second.
-        If `both` is True, also return the opposite.
         """
+        if name:
+            if self.both:
+                return 'Bleu T->H', 'Bleu H->T'
+            else:
+                return 'Bleu T->H'
+
         tokens1 = [t.lemma for t in pair.annotated_t.tokens]
         tokens2 = [t.lemma for t in pair.annotated_h.tokens]
 
@@ -410,25 +450,30 @@ class FeatureExtractor(object):
 
         return bleu1
 
-    def length_proportion(self):
+    def length_proportion(self, pair, name=False):
         """
         Compute the proportion of the size of T to H.
 
         If stopwords are given, they are removed prior the computation.
         """
+        if name:
+            return 'Length Ratio'
+
         length_t = len(self.content_tokens_t)
         length_h = len(self.content_tokens_h)
         return length_t / length_h
 
-    def negation_check(self, pair):
+    def negation_check(self, pair, name=False):
         """
-         Check if a verb from H is negated in T. Negation is understood both as the
-         verb itself negated by an adverb such as not or never, or by the presence
-         of a non-negated antonym.
+         Check if a verb from H is negated in T. Negation is understood both as
+         the verb itself negated by an adverb such as not or never, or by the
+         presence of a non-negated antonym.
 
-         :type pair: datastructures.Pair
          :return: 1 for negation, 0 otherwise
         """
+        if name:
+            return 'Negated Verb'
+
         t = pair.annotated_t
         h = pair.annotated_h
 
@@ -440,7 +485,6 @@ class FeatureExtractor(object):
 
         for verb_t in verbs_t:
             # check if it is in H
-            #TODO: also check synonyms
             # we do a linear search instead of using a set, yes
             # the overhead of creating a set to check 1-4 verbs is not worth it
             for verb_h in verbs_h:
@@ -452,3 +496,71 @@ class FeatureExtractor(object):
 
         return 0
 
+
+def _is_negated(verb):
+    """
+    Check if a verb is negated in the syntactic tree. This function searches its
+    direct syntactic children for a negation relation.
+
+    :type verb: datastructures.Token
+    :return: bool
+    """
+    for dependent in verb.dependents:
+        if dependent.dependency_relation == config.negation_rel:
+            return True
+
+    return False
+
+
+def _count_dependency_matches(deps1, deps2):
+    """
+    Checks how many of the deps1 have a matching dependency in deps2
+
+    :param deps1: list or set of Dependency objects
+    :param deps2: list or set of Dependency objects
+    :return: integer
+    """
+    matches = 0
+    for dep1 in deps1:
+        for dep2 in deps2:
+            if dep1.is_equivalent(dep2):
+                matches += 1
+                break
+
+    return matches
+
+
+def _has_nominalization(sent1, sent2):
+    """
+    Internal helper function. Returns 1 if a verb in sent 1 has a nominalization
+    in sent2, 0 otherwise.
+
+    :param sent1: datastructures.Sentence
+    :param sent2: datastructures.Sentence
+    """
+    verbs1 = [token.lemma for token in sent1.tokens if token.pos == 'VERB']
+    # lemmas2 = set(token.lemma for token in sent2.tokens)
+    for verb in verbs1:
+        nominalizations = own.find_nominalizations(verb)
+        for nominalization in nominalizations:
+            for token2 in sent2.tokens:
+                if token2.lemma == nominalization and \
+                                token2.dependency_relation == 'dobj':
+                    return 1
+
+    return 0
+
+
+def flatten(list_):
+    """
+    Flatten a list containing sublists/tuples and single values.
+    """
+    flat_list = []
+
+    for value in list_:
+        if isinstance(value, (tuple, list)):
+            flat_list.extend(value)
+        else:
+            flat_list.append(value)
+
+    return flat_list

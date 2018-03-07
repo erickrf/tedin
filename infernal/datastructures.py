@@ -13,6 +13,10 @@ from collections import Counter
 
 from infernal import lemmatization
 from infernal import openwordnetpt as own
+from infernal import ppdb
+
+
+content_word_tags = {'NOUN', 'VERB', 'ADJ', 'ADV', 'PNOUN'}
 
 
 def _compat_repr(repr_string, encoding='utf-8'):
@@ -25,6 +29,23 @@ def _compat_repr(repr_string, encoding='utf-8'):
         return repr_string.encode(encoding)
     else:
         return repr_string
+
+
+def filter_words_by_pos(tokens, tags=None):
+    """
+    Filter out words based on their POS tags.
+
+    If no set of tags is provided, a default of content tags is used:
+    {'NOUN', 'VERB', 'ADJ', 'ADV', 'PNOUN'}
+
+    :param tokens: list of datastructures.Token objects
+    :param tags: optional set of allowed tags
+    :return: list of the tokens having the allowed tokens
+    """
+    if tags is None:
+        tags = content_word_tags
+
+    return [token for token in tokens if token.pos in tags]
 
 
 class Dataset(object):
@@ -206,6 +227,93 @@ class Pair(object):
         p.annotated_h = self.annotated_t
         return p
 
+    def find_ppdb_alignments(self, max_length):
+        """
+        Find lexical and phrasal alignments in the pair according to
+        transformation rules from the paraphrase database.
+
+        This function should only be called after annotated_t and annotated_h
+        have been provided.
+
+        :param max_length: maximum length of the left-hand side (in number of
+            tokens)
+        """
+        tokens_t = self.annotated_t.tokens
+        tokens_h = self.annotated_h.tokens
+        token_texts_t = [token.text.lower() for token in tokens_t]
+        token_texts_h = [token.text.lower() for token in tokens_h]
+        alignments = []
+
+        # for purposes of this function, treat pronouns as content words
+        global content_word_tags
+
+        for i, token in enumerate(tokens_t):
+            # check the maximum length that makes sense to search for
+            # (i.e., so it doesn't go past sentence end)
+            max_possible_length = min(len(tokens_t) - i, max_length)
+            for length in range(1, max_possible_length):
+                if length == 1 and token.pos not in content_word_tags:
+                    continue
+
+                lhs = [token for token in token_texts_t[i:i + length]]
+                rhs_rules = ppdb.get_rhs(lhs)
+                if not rhs_rules:
+                    continue
+
+                # now get the token objects, instead of just their text
+                lhs = tokens_t[i:i + length]
+
+                for rule in rhs_rules:
+                    index = ppdb.search(token_texts_h, rule)
+                    if index == -1:
+                        continue
+                    alignment = (lhs, tokens_h[index:index + len(rule)])
+                    alignments.append(alignment)
+
+        self.ppdb_alignments = alignments
+
+    def find_lexical_alignments(self):
+        '''
+        Find the lexical alignments in the pair.
+
+        Lexical alignments are simply two equal or synonym words.
+
+        :return: list with the (Token, Token) aligned tuples
+        '''
+        # pronouns aren't content words, but let's pretend they are
+        content_word_tags = {'NOUN', 'VERB', 'PRON', 'ADJ', 'ADV', 'PNOUN'}
+        content_words_t = [
+            token for token in filter_words_by_pos(
+                self.annotated_t.tokens, content_word_tags)
+            # own-pt lists ser and ter as synonyms
+            if token.lemma not in ['ser', 'ter']]
+
+        content_words_h = [
+            token for token in filter_words_by_pos(
+                self.annotated_h.tokens, content_word_tags)
+            if token.lemma not in ['ser', 'ter']]
+
+        lexical_alignments = []
+
+        for token_t in content_words_t:
+            nominalizations_t = own.find_nominalizations(token_t.lemma)
+
+            for token_h in content_words_h:
+                aligned = False
+                if token_t.lemma == token_h.lemma:
+                    aligned = True
+                elif own.are_synonyms(token_t.lemma, token_h.lemma):
+                    aligned = True
+                elif token_h.lemma in nominalizations_t:
+                    aligned = True
+                elif token_t.lemma in own.find_nominalizations(token_h.lemma):
+                    aligned = True
+
+                if aligned:
+                    lexical_alignments.append((token_t, token_h))
+
+        self.lexical_alignments = lexical_alignments
+
 
 class Token(object):
     """
@@ -330,8 +438,8 @@ class Dependency(object):
         if self.label != other.label:
             return False
 
-        lemma1 = self.head.lemma
-        lemma2 = other.head.lemma
+        lemma1 = self.head.lemma if self.head else None
+        lemma2 = other.head.lemma if other.head else None
         if lemma1 != lemma2 and not own.are_synonyms(lemma1, lemma2):
             return False
 

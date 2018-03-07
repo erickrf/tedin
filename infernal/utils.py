@@ -15,6 +15,7 @@ from xml.dom import minidom
 import numpy as np
 import json
 import os
+import nltk
 
 from . import config
 from . import datastructures as ds
@@ -70,6 +71,17 @@ class EmbeddingDictionary(object):
         """
         indices = [self.wd[token] for token in tokens]
         return self.embeddings[indices]
+
+
+def load_stopwords():
+    """
+    Return a set of stopwords
+    """
+    stopwords = set(nltk.corpus.stopwords.words('portuguese'))
+    # add punctuation and the word "é" --- surprisingly, it is lacking
+    stopwords.update('.,!?;:"\'()&[]{}-é')
+    stopwords.update(['ser', 'estar'])
+    return stopwords
 
 
 def print_cli_args():
@@ -261,9 +273,9 @@ def load_tsv(filename):
     pairs = []
     with open(filename, 'r') as f:
         for line in f:
-            sent1, sent2, label, similarity = line.split('\t')
+            sent1, sent2, label = line.strip().split('\t')
             entailment = map_entailment_string(label)
-            pair = ds.Pair(sent1, sent2, entailment)
+            pair = ds.Pair(sent1, sent2, None, entailment)
             pairs.append(pair)
 
     return pairs
@@ -310,7 +322,7 @@ def load_xml(filename):
             else:
                 entailment = ds.Entailment.none
 
-        pair = ds.Pair(t, h, entailment)
+        pair = ds.Pair(t, h, None, entailment)
         pairs.append(pair)
     
     return pairs
@@ -606,6 +618,17 @@ def create_label_dict(pairs):
     labels = set(pair.label.name for pair in pairs)
     label_dict = {label: i for i, label in enumerate(labels)}
     return label_dict
+
+
+def extract_classes(pairs):
+    """
+    Extract the class infomartion (paraphrase, entailment, none, contradiction)
+    from the pairs.
+
+    :return: a numpy array with values from 0 to num_classes - 1
+    """
+    classes = np.array([pair.entailment.value for pair in pairs])
+    return classes
 
 
 def load_tedin_data(path, label_dict=None, use_weights=False):

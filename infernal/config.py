@@ -20,10 +20,10 @@ corenlp_url = 'http://localhost'
 corenlp_port = 9000
 
 # path to the corenlp models inside the server
-# corenlp_depparse_path = r'models/pt-br/dep-parser'
-# corenlp_pos_path = 'models/pt-br/pos-tagger.dat'
-corenlp_depparse_path = None
-corenlp_pos_path = None
+corenlp_depparse_path = r'models/pt-br/dep-parser'
+corenlp_pos_path = 'models/pt-br/pos-tagger.dat'
+# corenlp_depparse_path = None
+# corenlp_pos_path = None
 
 palavras_endpoint = 'http://143.107.183.175:12680/services/service_palavras_flat.php'
 # URL dentro da rede NILC
