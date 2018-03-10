@@ -577,8 +577,11 @@ def load_positive_and_negative_data(path, word_dict, dep_dict, label_dict=None,
     pairwise ranker.
 
     :param path: path to saved pairs in pickle format
+    :param word_dict: dictionary mapping words to integers
+    :param dep_dict: dictionary mapping dependency labels to integers
     :param label_dict: dictionary mapping RTE labels to integers or None
         if None, one will be created
+    :param lower: whether to lowercase tokens
     :return: tuple of ds.Datasets (positive, negative)
     """
     pairs = load_pickled_pairs(path)

@@ -34,8 +34,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('train', help='Training pairs (preprocessed pickle)')
     parser.add_argument('valid', help='Validation pairs (same format)')
+    parser.add_argument('dep_dict',
+                        help='Dictionary of dependency labels (JSON)')
     parser.add_argument('embeddings', help='Numpy embeddings file')
     parser.add_argument('model', help='Directory to save model and logs')
+    parser.add_argument('--lower', help='Lowercase tokens', action='store_true')
     parser.add_argument('-l', help='Learning rate', type=float,
                         dest='learning_rate', default=0.01)
     parser.add_argument('--le', help='Label embedding size', default=10,
@@ -59,10 +62,15 @@ if __name__ == '__main__':
 
     # add a single OOV vector here
     # TODO: use a more sensible way of generating embeddings for OOV words
+    wd_path = utils.get_vocabulary_path(args.embeddings)
+    wd = utils.load_vocabulary(wd_path)
     embeddings = utils.load_embeddings(args.embeddings, add_vectors=1,
                                        dir_to_save=args.model)
-    train_data = utils.load_positive_and_negative_data(args.train)
-    valid_data = utils.load_positive_and_negative_data(args.valid)
+    dd = utils.load_label_dict(args.dep_dict)
+    train_data = utils.load_positive_and_negative_data(args.train, wd, dd,
+                                                       lower=args.lower)
+    valid_data = utils.load_positive_and_negative_data(args.valid, wd, dd,
+                                                       lower=args.lower)
     num_labels = get_num_dep_labels(train_data[0])
 
     label_emb_shape = [num_labels, args.label_embedding_size]

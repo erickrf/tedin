@@ -22,15 +22,22 @@ def eval_performance(gold_labels, sys_labels):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('model', help='Directory with trained model')
+    parser.add_argument('dep_dict',
+                        help='Dictionary of dependency labels (JSON)')
     parser.add_argument('embeddings', help='Numpy file with embeddings')
     parser.add_argument('data', help='Preprocessed pickled test pairs')
+    parser.add_argument('--lower', help='Lowercase tokens', action='store_true')
     args = parser.parse_args()
 
     extra_embeddings_path = utils.get_embeddings_path(args.model)
+    wd_path = utils.get_vocabulary_path(args.embeddings)
+    wd = utils.load_vocabulary(wd_path)
     embeddings = utils.load_embeddings([args.embeddings, extra_embeddings_path])
 
     label_dict = utils.load_label_dict(args.model)
-    data, label_dict = utils.load_tedin_data(args.data, label_dict)
+    dep_dict = utils.load_label_dict(args.dep_dict)
+    data, label_dict = utils.load_tedin_data(args.data, wd, dep_dict,
+                                             label_dict, args.lower)
     tedin = nn.TreeEditDistanceNetwork.load(args.model, embeddings)
     answers = tedin.classify(data)
     gold_labels = data.labels

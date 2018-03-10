@@ -15,11 +15,14 @@ from infernal import utils
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('train', help='Training pairs')
-    parser.add_argument('valid', help='Validation pairs')
+    parser.add_argument('train', help='Training pairs (pickle)')
+    parser.add_argument('valid', help='Validation pairs (pickle)')
+    parser.add_argument('dep_dict',
+                        help='Dictionary of dependency labels (JSON)')
     parser.add_argument('embeddings', help='Numpy embeddings file')
     parser.add_argument('model', help='Directory to load pretrained model and '
                                       'save new version and logs')
+    parser.add_argument('--lower', help='Lowercase tokens', action='store_true')
     parser.add_argument('-l', help='Learning rate', type=float,
                         dest='learning_rate', default=0.01)
     parser.add_argument('-d', help='Dropout keep', type=float, dest='dropout',
@@ -41,17 +44,23 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     utils.print_cli_args()
 
+    wd_path = utils.get_vocabulary_path(args.embeddings)
+    wd = utils.load_vocabulary(wd_path)
     extra_path = utils.get_embeddings_path(args.model)
     embeddings = utils.load_embeddings([args.embeddings, extra_path])
+    dep_dict = utils.load_label_dict(args.dep_dict)
 
     if args.load_label_dict:
         label_dict = utils.load_label_dict(args.model)
     else:
         label_dict = None
 
-    train_data, label_dict = utils.load_tedin_data(args.train, label_dict,
-                                                   use_weights=args.use_weights)
-    valid_data, _ = utils.load_tedin_data(args.valid, label_dict)
+    train_data, label_dict = utils.load_tedin_data(
+        args.train, wd, dep_dict, label_dict, args.lower,
+        use_weights=args.use_weights)
+    valid_data, _ = utils.load_tedin_data(
+        args.valid,  wd, dep_dict, label_dict, args.lower)
+
     utils.write_label_dict(label_dict,
                            os.path.join(args.model, 'label-dict.json'))
 
