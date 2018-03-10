@@ -321,7 +321,7 @@ class Token(object):
     annotations.
     """
     __slots__ = ['id', 'text', 'pos', 'lemma', 'head', 'dependents',
-                 'dependency_relation']
+                 'dependency_relation', 'dependency_index', 'word_index']
 
     def __init__(self, num, text, pos=None, lemma=None):
         self.id = num  # sequential id in the sentence
@@ -330,6 +330,8 @@ class Token(object):
         self.lemma = lemma
         self.dependents = []
         self.dependency_relation = None
+        self.dependency_index = None
+        self.word_index = None
 
         # Token.head points to another token, not an index
         self.head = None

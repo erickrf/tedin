@@ -21,6 +21,13 @@ if __name__ == '__main__':
                         help='Path to embeddings in npy format (there must be '
                              'a .txt file with vocabulary in the same folder)')
     parser.add_argument('output', help='npz file to save data')
+    ld_group = parser.add_mutually_exclusive_group()
+    ld_group.add_argument('--load-label-dict', dest='load_ld_path',
+                          help='Dictionary mapping entailment labels to '
+                               'integers (JSON).')
+    ld_group.add_argument('--save-label-dict', dest='save_ld_path',
+                          help='Path to save the generated label dict. Use only'
+                               ' if --load-label-dict is not given.')
     args = parser.parse_args()
 
     pairs = utils.load_pickled_pairs(args.data)
@@ -33,6 +40,9 @@ if __name__ == '__main__':
 
     feature_names = fex.get_feature_names()
     x = fex.extract_dataset_features(pairs)
-    y = utils.extract_classes(pairs)
+    ld = utils.load_label_dict(args.load_ld_path) if args.load_ld_path else None
+    y, ld = utils.extract_classes(pairs, ld)
 
     np.savez(args.output, x=x, y=y)
+    if args.save_ld_path:
+        utils.write_label_dict(ld, args.save_ld_path)

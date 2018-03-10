@@ -151,32 +151,6 @@ def write_label_dict(label_dict, path):
         json.dump(label_dict, f)
 
 
-def assign_word_indices(pairs, wd, lower=True):
-    """
-    Assign each token in the sentences of pairs their embedding index.
-
-    Changes are in-place.
-
-    This is done here instead of in a pre-processing stage to allow for
-    different embedding models with different vocabularies.
-
-    :param pairs: list of Pair objects
-    :param wd: dictionary mapping strings to ints
-    :param lower: whether to lowercase tokens before indexing
-    """
-    def get_index(token):
-        if lower:
-            return wd[token.lower()]
-        return wd[token]
-
-    for pair in pairs:
-        for token in pair.annotated_t.tokens:
-            token.index = get_index(token.text)
-
-        for token in pair.annotated_h.tokens:
-            token.index = get_index(token.text)
-
-
 def load_pickled_pairs(path, add_inverted=False,
                        paraphrase_to_entailment=False):
     """
@@ -196,7 +170,7 @@ def load_pickled_pairs(path, add_inverted=False,
     if add_inverted:
         extra_pairs = []
         for pair in pairs:
-            if pair.label == ds.Entailment.paraphrase:
+            if pair.entailment == ds.Entailment.paraphrase:
                 ent_value = ds.Entailment.paraphrase
             else:
                 # inverting None and Entailment classes yields None
@@ -211,9 +185,9 @@ def load_pickled_pairs(path, add_inverted=False,
     count = 0
     if paraphrase_to_entailment:
         for pair in pairs:
-            if pair.label == ds.Entailment.paraphrase:
+            if pair.entailment == ds.Entailment.paraphrase:
                 count += 1
-                pair.label = ds.Entailment.entailment
+                pair.entailment = ds.Entailment.entailment
 
         logging.debug('Changed %d paraphrases to entailment' % count)
 
@@ -532,7 +506,8 @@ def load_embeddings(path_or_paths, normalize=True,
     return embeddings
 
 
-def create_tedin_dataset(pairs, label_dict, use_weights=False):
+def create_tedin_dataset(pairs, word_dict, dep_dict, label_dict,
+                         lower, use_weights=False):
     """
     Create a Dataset object to feed a Tedin model.
 
@@ -545,6 +520,12 @@ def create_tedin_dataset(pairs, label_dict, use_weights=False):
     nodes1 = []
     nodes2 = []
     labels = []
+
+    def set_indices(token):
+        text = token.text.lower() if lower else token.text
+        token.word_index = word_dict[text]
+        token.dependency_index = dep_dict[token.dependency_relation]
+
     for pair in pairs:
         t = pair.annotated_t
         h = pair.annotated_h
@@ -552,14 +533,16 @@ def create_tedin_dataset(pairs, label_dict, use_weights=False):
         h_indices = []
 
         for token in t.tokens:
-            t_indices.append([token.index, token.dep_index])
+            set_indices(token)
+            t_indices.append([token.word_index, token.dependency_index])
 
         for token in h.tokens:
-            h_indices.append([token.index, token.dep_index])
+            set_indices(token)
+            h_indices.append([token.word_index, token.dependency_index])
 
         nodes1.append(t_indices)
         nodes2.append(h_indices)
-        labels.append(label_dict[pair.label.name])
+        labels.append(label_dict[pair.entailment.name])
 
     nodes1, _ = nested_list_to_array(nodes1, dim3=2)
     nodes2, _ = nested_list_to_array(nodes2, dim3=2)
@@ -579,15 +562,16 @@ def split_positive_negative(pairs):
     :return: tuple (positives, negatives)
     """
     positive = [pair for pair in pairs
-                if pair.label == ds.Entailment.entailment
-                or pair.label == ds.Entailment.paraphrase]
+                if pair.entailment == ds.Entailment.entailment
+                or pair.entailment == ds.Entailment.paraphrase]
     neutrals = [pair for pair in pairs
-                if pair.label == ds.Entailment.none]
+                if pair.entailment == ds.Entailment.none]
 
     return positive, neutrals
 
 
-def load_positive_and_negative_data(path, label_dict=None):
+def load_positive_and_negative_data(path, word_dict, dep_dict, label_dict=None,
+                                    lower=True):
     """
     Load a pickle file with pairs and do some necessary preprocessing for the
     pairwise ranker.
@@ -602,8 +586,10 @@ def load_positive_and_negative_data(path, label_dict=None):
         label_dict = create_label_dict(pairs)
 
     pos_pairs, neg_pairs = split_positive_negative(pairs)
-    pos_data = create_tedin_dataset(pos_pairs, label_dict)
-    neg_data = create_tedin_dataset(neg_pairs, label_dict)
+    pos_data = create_tedin_dataset(pos_pairs, word_dict, dep_dict, label_dict,
+                                    lower)
+    neg_data = create_tedin_dataset(neg_pairs, word_dict, dep_dict, label_dict,
+                                    lower)
 
     msg = '%d positive and %d negative pairs' % (len(pos_data), len(neg_data))
     logging.info(msg)
@@ -615,29 +601,43 @@ def create_label_dict(pairs):
     """
     Create a dictionary mapping label names (entailment, none, etc) to integers
     """
-    labels = set(pair.label.name for pair in pairs)
+    labels = set(pair.entailment.name for pair in pairs)
     label_dict = {label: i for i, label in enumerate(labels)}
     return label_dict
 
 
-def extract_classes(pairs):
+def extract_classes(pairs, label_dict=None):
     """
     Extract the class infomartion (paraphrase, entailment, none, contradiction)
     from the pairs.
 
-    :return: a numpy array with values from 0 to num_classes - 1
+    :param pairs: list of pairs
+    :param label_dict: if given, must be a mapping from entailment strings to
+        ints. If not given, one will be generated
+    :return: if label_dict is given, a numpy array with values from 0 to
+        num_classes - 1.
+        If label_dict is not given, a tuple with the array and a label_dict
     """
-    classes = np.array([pair.entailment.value for pair in pairs])
-    return classes
+    if label_dict is None:
+        label_dict = create_label_dict(pairs)
+
+    classes = np.array([label_dict[pair.entailment.name] for pair in pairs])
+
+    return classes, label_dict
 
 
-def load_tedin_data(path, label_dict=None, use_weights=False):
+def load_tedin_data(path, word_dict, dep_dict, label_dict=None, lower=True,
+                    use_weights=False):
     """
     Load a pickle file with pairs and return a dataset for the tedin model.
 
     :param path: path to pickle file
-    :param label_dict: if given, must be a mapping from entailment values to
+    :param word_dict: dictionary mapping tokens to integers
+    :param dep_dict: dictionary mapping dependency labels to integers
+    :param lower: whether to lowercase tokens before looking in the word_dict
+    :param label_dict: if given, must be a mapping from entailment strings to
         ints. If not given, one will be generated
+    :param use_weights: use class weights to counter class unbalance
     :return: dataset, label_dict
     """
     pairs = load_pickled_pairs(path)
@@ -645,7 +645,8 @@ def load_tedin_data(path, label_dict=None, use_weights=False):
     if label_dict is None:
         label_dict = create_label_dict(pairs)
 
-    data = create_tedin_dataset(pairs, label_dict, use_weights)
+    data = create_tedin_dataset(pairs, word_dict, dep_dict, label_dict,
+                                lower, use_weights)
     return data, label_dict
 
 

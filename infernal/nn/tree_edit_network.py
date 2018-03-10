@@ -11,7 +11,6 @@ import numpy as np
 import tensorflow as tf
 
 from .base import TedinParameters, Trainable
-from ..datastructures import Dataset, Token
 from .. import utils
 
 # operation codes
@@ -46,7 +45,8 @@ def find_zss_operations(pair, insert_costs, remove_costs, update_costs):
         return remove_costs[node.id - 1]
 
     def get_update_cost(node1, node2):
-        if node1.index == node2.index and node1.dep_index == node2.dep_index:
+        if node1.word_index == node2.word_index and \
+                        node1.dependency_index == node2.dependency_index:
             return 0
         return update_costs[node1.id - 1, node2.id - 1]
 
@@ -527,12 +527,12 @@ class TreeEditDistanceNetwork(Trainable):
                 a1 = op.arg1
                 a2 = op.arg2
                 if op.type == INSERT:
-                    inserts.append([a2.index, a2.dep_index])
+                    inserts.append([a2.word_index, a2.dependency_index])
                 elif op.type == REMOVE:
-                    removes.append([a1.index, a1.dep_index])
+                    removes.append([a1.word_index, a1.dependency_index])
                 elif op.type == UPDATE or op.type == MATCH:
-                    updates1.append([a1.index, a1.dep_index])
-                    updates2.append([a2.index, a2.dep_index])
+                    updates1.append([a1.word_index, a1.dependency_index])
+                    updates2.append([a2.word_index, a2.dependency_index])
 
             all_inserts.append(inserts)
             all_removes.append(removes)
