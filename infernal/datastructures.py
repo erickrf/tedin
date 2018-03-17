@@ -503,6 +503,9 @@ class Sentence(object):
             dep = Dependency(relation, head, token)
             self.dependencies.append(dep)
 
+    def conll_representation(self):
+        return self.structure_representation()
+
     def structure_representation(self):
         """
         Return a CoNLL representation of the sentence's syntactic structure.
@@ -511,8 +514,10 @@ class Sentence(object):
         for token in self.tokens:
             head = token.head.id if token.head is not None else 0
             lemma = token.lemma if token.lemma is not None else '_'
-            line = '{token.id}\t\t{token.text}\t\t{lemma}\t\t{token.pos}\t\t' \
-                   '{head}\t\t{token.dependency_relation}'
+            line = '{token.id}\t{token.text}\t{lemma}\t{token.pos}\t_\t_\t' \
+                   '{head}\t{token.dependency_relation}' \
+                   '' \
+                   ''
             line = line.format(token=token, lemma=lemma, head=head)
             lines.append(line)
 
