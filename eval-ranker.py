@@ -7,7 +7,6 @@ Script to evaluate the performance of a Pair Ranker.
 from __future__ import division, print_function, unicode_literals
 
 import argparse
-import os
 
 from infernal import utils
 from infernal import nn
