@@ -16,6 +16,7 @@ import numpy as np
 import json
 import os
 import nltk
+import zss
 
 from . import config
 from . import datastructures as ds
@@ -247,7 +248,7 @@ def load_tsv(filename):
     pairs = []
     with open(filename, 'r') as f:
         for line in f:
-            sent1, sent2, label = line.strip().split('\t')
+            sent1, sent2, label = line.strip().split('\t')[:3]
             entailment = map_entailment_string(label)
             pair = ds.Pair(sent1, sent2, None, entailment)
             pairs.append(pair)
@@ -665,3 +666,26 @@ def get_logger(name='logger'):
     logger.propagate = False
 
     return logger
+
+
+def run_zss(sent1, sent2):
+    """
+    Compute a simple tree edit distance (TED) value and operations.
+
+    Nodes are considered to match if they have the same dependency label and
+    lemma.
+    """
+    def get_children(node):
+        return node.dependents
+
+    def get_label(node):
+        return node.lemma, node.dependency_relation
+
+    def label_dist(label1, label2):
+        return int(label1 != label2)
+
+    root_t = sent1.root
+    root_h = sent2.root
+
+    return zss.simple_distance(root_t, root_h, get_children, get_label,
+                               label_dist, True)
