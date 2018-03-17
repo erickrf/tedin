@@ -19,6 +19,20 @@ REMOVE = zss.Operation.remove
 UPDATE = zss.Operation.update
 MATCH = zss.Operation.match
 
+codes_to_names = {INSERT: 'insert', REMOVE: 'remove',
+                  UPDATE: 'update', MATCH: 'match'}
+
+
+def print_ted_operations(operations):
+    """
+    Pretty print to stdout the operation types and arguments.
+    """
+    for operation in operations:
+        line = '{}\t{}\t{}\tCost: {}'.format(codes_to_names[operation.type],
+                                             operation.arg1, operation.arg2,
+                                             operation.cost)
+        print(line)
+
 
 def get_variable_by_name(name):
     return [v for v in tf.global_variables() if v.name == name][0]
