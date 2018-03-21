@@ -24,12 +24,13 @@ class FeatureExtractor(object):
     """
     Class to extract features from pairs.
     """
-    def __init__(self, both, stopwords=None, ed=None):
+    def __init__(self, both, stopwords=None, ed=None, idf=None):
         """
 
         :param both: whether to extract bidrectional features when applicable.
         :param stopwords: set of stopwords, or None
         :param ed: utils.EmbeddingDictionary
+        :param idf: dictionary mapping words to IDF values
         """
         self.both = both
         self.ed = ed
@@ -284,13 +285,15 @@ class FeatureExtractor(object):
         """
         Check if quantities on t and h match.
 
-        Only checks quantities modifying aligned heads. This returns 0 if there
-        is a mismatch and 1 otherwise.
-
-        :type pair: datastructures.Pair
+        Only checks quantities modifying aligned heads. This function returns a
+        tuple with two values. The first one is 0 if there are no matching
+        values, and 1 otherwise. The second one is 0 if there are no mismatching
+        values, and 1 otherwise.
         """
         if name:
-            return 'Quantity Agreement'
+            return 'Quantity Match', 'Quantity Mismatch'
+
+        values = [0, 0]
 
         for token_t, token_h in pair.lexical_alignments:
             # let's assume only one quantity modifier for each token
@@ -312,9 +315,11 @@ class FeatureExtractor(object):
             if quantity_h != quantity_t:
                 msg = 'Quantities differ in pair {}: {} and {}'
                 logging.debug(msg.format(pair.id, quantity_t, quantity_h))
-                return 0
+                values[1] = 1
+            elif quantity_h == quantity_t:
+                values[0] = 1
 
-        return 1
+        return values
 
     #TODO: this feature is weird. does it help at all?
     def matching_verb_arguments(self, pair, name=False):
