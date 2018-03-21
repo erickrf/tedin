@@ -51,7 +51,6 @@ def preprocess_pairs(pairs):
             raise
 
         pair.find_lexical_alignments()
-        # pair.find_ppdb_alignments(max_length=5)
 
     return pairs
 
@@ -64,7 +63,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     own.load_wordnet(config.ownpt_path)
-    # ppdb.load_ppdb(config.ppdb_path)
 
     pairs = utils.load_pairs(args.input)
     pairs = preprocess_pairs(pairs)
