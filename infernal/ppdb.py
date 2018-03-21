@@ -163,19 +163,19 @@ def _is_trivial_paraphrase(exp1, exp2):
 
         return word
 
-    prepositions = {'de', 'da', 'do', 'das', 'dos',
-                    'em', 'no', 'na', 'nos', 'nas'}
-    if exp1[0] in prepositions:
+    to_remove = {'de', 'da', 'do', 'das', 'dos',
+                 'em', 'no', 'na', 'nos', 'nas', 'e'}
+    if exp1[0] in to_remove:
         exp1 = exp1[1:]
-    if exp2[0] in prepositions:
+    if exp2[0] in to_remove:
         exp2 = exp2[1:]
 
     if len(exp1) == 0 or len(exp2) == 0:
         return True
 
-    if exp1[-1] in prepositions:
+    if exp1[-1] in to_remove:
         exp1 = exp1[:-1]
-    if exp2[-1] in prepositions:
+    if exp2[-1] in to_remove:
         exp2 = exp2[:-1]
 
     if len(exp1) != len(exp2):
