@@ -322,10 +322,6 @@ class FeatureExtractor(object):
         Check if there is at least one verb matching in the two sentences and, if
         so, its object and subject are the same. In case of a positive result,
         return 1.
-
-        :param both: if True, return a tuple with two values. The first is 1
-        if T and H have the same subject, T has an object and H not. The second
-        is 1 if both have the same subject, H has an object and T not.
         """
         if name:
             if self.both:
@@ -453,8 +449,6 @@ class FeatureExtractor(object):
     def length_proportion(self, pair, name=False):
         """
         Compute the proportion of the size of T to H.
-
-        If stopwords are given, they are removed prior the computation.
         """
         if name:
             return 'Length Ratio'
