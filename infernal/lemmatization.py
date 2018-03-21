@@ -79,7 +79,35 @@ def get_lemma(word, pos):
         # a lot of times, this happens with signs like $ or %
         if len(word) == 1:
             return word
-        
+
+        # UNITEX has a Brazilian vocabulary; some sequences are typical from
+        # European Portuguese
+        retry = False
+        if 'ct' in word:
+            word = word.replace('ct', 't')  # facto -> fato
+            retry = True
+        elif 'cç' in word:
+            word = word.replace('cç', 'ç')  # acção -> ação
+            retry = True
+        elif 'pt' in word:
+            word = word.replace('pt', 't')  # óptimo -> ótimo
+            retry = True
+        elif 'pç' in word:
+            word = word.replace('pç', 'ç')  # adopção -> adoção
+            retry = True
+        elif 'oo' in word:
+            word = word.replace('oo', 'ôo')  # voo -> vôo
+            retry = True
+        elif 'ee' in word:
+            word = word.replace('ee', 'êe')
+            retry = True
+        elif 'mn' in word:
+            word = word.replace('mn', 'n')
+            retry = True
+
+        if retry and (word, delaf_pos) in unitex_dictionary:
+            return unitex_dictionary[(word, delaf_pos)]
+
         # the POS tag could be wrong
         # but nouns and adjectives are more likely to be mistaken for each other
         #TODO: check if it is a good idea to allow changes from noun/adj to verb
