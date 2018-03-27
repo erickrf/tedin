@@ -24,13 +24,12 @@ class FeatureExtractor(object):
     """
     Class to extract features from pairs.
     """
-    def __init__(self, both, stopwords=None, ed=None, idf=None):
+    def __init__(self, both, stopwords=None, ed=None):
         """
 
         :param both: whether to extract bidrectional features when applicable.
         :param stopwords: set of stopwords, or None
         :param ed: utils.EmbeddingDictionary
-        :param idf: dictionary mapping words to IDF values
         """
         self.both = both
         self.ed = ed
@@ -50,7 +49,8 @@ class FeatureExtractor(object):
                                   self.simple_tree_distance,
                                   self.soft_word_overlap,
                                   self.word_overlap_proportion,
-                                  self.word_synonym_overlap_proportion]
+                                  self.word_synonym_overlap_proportion,
+                                  self.are_entities_aligned]
 
     def get_feature_names(self):
         """
@@ -203,19 +203,66 @@ class FeatureExtractor(object):
         if name:
             return 'Synonym Overlap T', 'Synonym Overlap H'
 
-        alignments = [(token1, token2)
-                      for token1, token2 in pair.lexical_alignments
-                      if token1.lemma not in self.stopwords
-                      and token2.lemma not in self.stopwords]
+        # merge both lexical alignments and entity alignments
+        if len(pair.entity_alignments) > 0:
+            aligned_ents1, aligned_ents2 = zip(*pair.entity_alignments)
+            aligned_ent_tokens1 = [token for ent in aligned_ents1
+                                   for token in ent]
+            aligned_ent_tokens2 = [token for ent in aligned_ents2
+                                   for token in ent]
+        else:
+            aligned_ent_tokens1 = []
+            aligned_ent_tokens2 = []
 
-        num_common_tokens = len(alignments)
+        if len(pair.lexical_alignments) > 0:
+            aligned_lex_tokens1, aligned_lex_tokens2 = zip(
+                *pair.lexical_alignments)
+        else:
+            aligned_lex_tokens1 = []
+            aligned_lex_tokens2 = []
+
+        aligned_tokens1 = set(aligned_ent_tokens1)
+        aligned_tokens1.update(aligned_lex_tokens1)
+        aligned_tokens1 = [token for token in aligned_tokens1
+                           if token.lemma not in self.stopwords]
+        aligned_tokens2 = set(aligned_ent_tokens2)
+        aligned_tokens2.update(aligned_lex_tokens2)
+        aligned_tokens2 = [token for token in aligned_tokens2
+                           if token.lemma not in self.stopwords]
+
         num_lemmas_t = len(self.content_lemma_set_t)
         num_lemmas_h = len(self.content_lemma_set_h)
 
-        proportion_t = num_common_tokens / num_lemmas_t
-        proportion_h = num_common_tokens / num_lemmas_h
+        proportion_t = len(aligned_tokens1) / num_lemmas_t
+        proportion_h = len(aligned_tokens2) / num_lemmas_h
 
         return proportion_t, proportion_h
+
+    def are_entities_aligned(self, pair, name=False):
+        """
+        Check whether named entities in the two sentences are aligned.
+        """
+        if name:
+            return ['Non-aligned Entity T', 'Non-aligned Entity H',
+                    'Has Aligned Entity']
+
+        values = [0, 0, 0]
+        if len(pair.entity_alignments) == 0:
+            return values
+
+        aligned1, aligned2 = zip(*pair.entity_alignments)
+
+        for entity in pair.annotated_t.named_entities:
+            if entity in aligned1:
+                values[2] = 1
+            else:
+                values[0] = 1
+
+        for entity in pair.annotated_h.named_entities:
+            if entity not in aligned2:
+                values[1] = 1
+
+        return values
 
     def soft_word_overlap(self, pair, name=False):
         """
@@ -296,22 +343,23 @@ class FeatureExtractor(object):
         values = [0, 0]
 
         for token_t, token_h in pair.lexical_alignments:
-            # let's assume only one quantity modifier for each token
-            # (honestly, how could there be more than one?)
-            quantity_t = [d for d in token_t.dependents
-                          if d.dependency_relation == 'num']
-            quantity_h = [d for d in token_h.dependents
-                          if d.dependency_relation == 'num']
+            quantities_t = [d for d in token_t.dependents
+                            if d.dependency_relation == 'num']
+            quantities_h = [d for d in token_h.dependents
+                            if d.dependency_relation == 'num']
 
-            if len(quantity_t) > 1 or len(quantity_h) > 1:
-                msg = 'More than one quantity modifier in "{}"'
-                logging.warning(msg.format(pair.t))
-
-            if len(quantity_t) == 0 or len(quantity_h) == 0:
+            if len(quantities_t) == 0 or len(quantities_h) == 0:
                 continue
 
-            quantity_t = numerals.get_number(quantity_t[0])
-            quantity_h = numerals.get_number(quantity_h[0])
+            if len(quantities_t) > 1:
+                msg = 'More than one quantity in T %s' % pair.t
+                logging.warning(msg)
+            if len(quantities_h) > 1:
+                msg = 'More than one quantity in H: %s' % pair.h
+                logging.warning(msg)
+
+            quantity_t = numerals.get_number(quantities_t)
+            quantity_h = numerals.get_number(quantities_h)
             if quantity_h != quantity_t:
                 msg = 'Quantities differ in pair {}: {} and {}'
                 logging.debug(msg.format(pair.id, quantity_t, quantity_h))
@@ -321,12 +369,11 @@ class FeatureExtractor(object):
 
         return values
 
-    #TODO: this feature is weird. does it help at all?
     def matching_verb_arguments(self, pair, name=False):
         """
-        Check if there is at least one verb matching in the two sentences and, if
-        so, its object and subject are the same. In case of a positive result,
-        return 1.
+        Check if there is at least one verb matching in the two sentences and,
+        if so, its object and subject are the same. In case of a positive
+        result, return 1.
         """
         if name:
             if self.both:
@@ -384,6 +431,8 @@ class FeatureExtractor(object):
         between dependencies in both sentences and those only in H (or also in T
          if `both` is True).
 
+        Punctuation and auxiliary relations are not counted.
+
         :type pair: datastructures.Pair
         """
         if name:
@@ -391,10 +440,13 @@ class FeatureExtractor(object):
                 return 'Depedency Overlap T', 'Depedency Overlap H'
             else:
                 return 'Dependency Overlap H'
+
         # dependencies are stored as a tuple of dependency label, head
         # and modifier.
-        deps_t = set(pair.annotated_t.dependencies)
-        deps_h = set(pair.annotated_h.dependencies)
+        deps_t = set([dep for dep in pair.annotated_t.dependencies
+                      if dep.label not in ['p', 'auxpass', 'aux']])
+        deps_h = set([dep for dep in pair.annotated_h.dependencies
+                      if dep.label not in ['p', 'auxpass', 'aux']])
 
         # matches_t and matches_h can be different
         matches_h = _count_dependency_matches(deps_h, deps_t)
