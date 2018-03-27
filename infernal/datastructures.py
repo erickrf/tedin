@@ -204,6 +204,7 @@ class Pair(object):
         self.h = h
         self.id = id_
         self.lexical_alignments = None
+        self.entity_alignments = None
         self.ppdb_alignments = None
         self.entailment = entailment
         self.annotated_h = None
@@ -226,6 +227,57 @@ class Pair(object):
         p.annotated_t = self.annotated_h
         p.annotated_h = self.annotated_t
         return p
+
+    def find_entity_alignments(self):
+        """
+        Find named entities aligned in the two sentences.
+
+        This function checks full forms and acronyms.
+        """
+        def preprocess_entity(entity):
+            if len(entity) > 1:
+                acronym = ''.join([token.text[0].lower() for token in entity
+                                   if token.text[0].isupper()])
+            else:
+                acronym = None
+
+            # remove dots from existing acronyms
+            words = [token.text.replace('.', '').lower() for token in entity]
+
+            return entity, words, acronym
+
+        entities_t = []
+        entities_h = []
+        self.entity_alignments = []
+        for entity_t in self.annotated_t.named_entities:
+            entities_t.append(preprocess_entity(entity_t))
+
+        for entity_h in self.annotated_h.named_entities:
+            entities_h.append(preprocess_entity(entity_h))
+
+        for entity_t, words_t, acronym_t in entities_t:
+
+            for entity_h, words_h, acronym_h in entities_h:
+                # if both entities have more than one word, compare them and not
+                # their acronyms; this avoids false positives when only initials
+                # match
+                # same goes if both are single words; there are no acronyms
+                both_mult = len(entity_t) > 1 and len(entity_h) > 1
+                both_single = len(entity_t) == 1 and len(entity_h) == 1
+                if both_mult or both_single:
+                    if words_t == words_h:
+                        self.entity_alignments.append((entity_t, entity_h))
+                    else:
+                        continue
+
+                # the remaining case is one is a single word and the other has
+                # many. Check one against the acronym of the other.
+                if len(entity_t) > 1:
+                    if acronym_t == words_h[0]:
+                        self.entity_alignments.append((entity_t, entity_h))
+                else:
+                    if acronym_h == words_t[0]:
+                        self.entity_alignments.append((entity_t, entity_h))
 
     def find_ppdb_alignments(self, max_length):
         """
@@ -404,6 +456,8 @@ class Dependency(object):
     """
     __slots__ = 'label', 'head', 'dependent'
 
+    equivalent_labels = {('nsubjpass', 'dobj'), ('dobj', 'nsubjpass')}
+
     def __init__(self, label, head, dependent):
         self.label = label
         self.head = head
@@ -437,7 +491,8 @@ class Dependency(object):
         :param other: another dependency instance
         :return: boolean
         """
-        if self.label != other.label:
+        eq_label = (self.label, other.label) in self.equivalent_labels
+        if not eq_label and self.label != other.label:
             return False
 
         lemma1 = self.head.lemma if self.head else None
@@ -457,7 +512,8 @@ class Sentence(object):
     """
     Class to store a sentence with linguistic annotations.
     """
-    __slots__ = 'tokens', 'root', 'lower_content_tokens', 'dependencies'
+    __slots__ = ['tokens', 'root', 'lower_content_tokens', 'dependencies',
+                 'named_entities', 'acronyms']
 
     def __init__(self, parser_output):
         """
@@ -481,6 +537,16 @@ class Sentence(object):
     def __repr__(self):
         repr_str = str(self)
         return _compat_repr(repr_str)
+
+    def set_named_entities(self, doc):
+        """
+        :param doc: a Doc object from Spacy
+        """
+        self.named_entities = []
+        for entity in doc.ents:
+            # each entity is a Span, a sequence of Spacy tokens
+            tokens = [self.tokens[spacy_token.i] for spacy_token in entity]
+            self.named_entities.append(tokens)
 
     def _extract_dependency_tuples(self):
         '''
