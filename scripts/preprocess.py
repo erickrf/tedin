@@ -9,6 +9,8 @@ This is useful when preprocessing takes time.
 import argparse
 import traceback
 import logging
+import spacy
+from spacy.tokens import Doc
 from six.moves import cPickle
 
 from infernal import config
@@ -17,7 +19,6 @@ from infernal import utils
 from infernal import external
 from infernal import datastructures as ds
 from infernal import openwordnetpt as own
-from infernal import ppdb
 
 
 def preprocess_pairs(pairs):
@@ -28,6 +29,10 @@ def preprocess_pairs(pairs):
     """
     parser_path = config.corenlp_depparse_path
     pos_path = config.corenlp_pos_path
+
+    # use spacy's nlp pipeline to run our custom tokenizer and their NER
+    nlp_pipeline = spacy.load('pt', disable=['parser', 'tagger'])
+    ner = nlp_pipeline.entity
 
     for i, pair in enumerate(pairs):
         tokens_t = tokenizer.tokenize(pair.t)
@@ -50,7 +55,16 @@ def preprocess_pairs(pairs):
             logging.error(tb)
             raise
 
+        # find the named entities and give them to the sentence object
+        doc_t = Doc(nlp_pipeline.vocab, words=tokens_t)
+        doc_h = Doc(nlp_pipeline.vocab, words=tokens_h)
+        ner(doc_t)
+        ner(doc_h)
+        pair.annotated_t.set_named_entities(doc_t)
+        pair.annotated_h.set_named_entities(doc_h)
+
         pair.find_lexical_alignments()
+        pair.find_entity_alignments()
 
     return pairs
 
