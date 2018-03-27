@@ -12,7 +12,8 @@ from six.moves import cPickle
 
 
 CLASSIFIER_FILENAME = 'classifier.pickle'
-NORMALIZED_FILENAME = 'normalizer.pickle'
+NORMALIZER_FILENAME = 'normalizer.pickle'
+TRANSFORMER_FILENAME = 'transformer.pickle'
 
 
 def load_data(filename):
@@ -37,11 +38,25 @@ def load_classifier(path):
     return classifier
 
 
+def load_transformer(path):
+    """
+    Load a serialized transformer (such as a PCA object) from a pickle.
+    """
+    path = os.path.join(path, TRANSFORMER_FILENAME)
+    if not os.path.isfile(path):
+        return None
+
+    with open(path, 'rb') as f:
+        transformer = cPickle.load(f)
+
+    return transformer
+
+
 def load_normalizer(path):
     """
     Load a normalizer serialized as a pickle from the given directory.
     """
-    path = os.path.join(path, NORMALIZED_FILENAME)
+    path = os.path.join(path, NORMALIZER_FILENAME)
     if not os.path.isfile(path):
         # no normalizer was created for this model
         return None
@@ -52,7 +67,7 @@ def load_normalizer(path):
     return normalizer
 
 
-def save(path, classifier, normalizer=None):
+def save(path, classifier, normalizer=None, transformer=None):
     """
     Save the classifier and the normalizer to the given directory.
     """
@@ -61,6 +76,11 @@ def save(path, classifier, normalizer=None):
         cPickle.dump(classifier, f)
 
     if normalizer:
-        normalizer_filename = os.path.join(path, NORMALIZED_FILENAME)
+        normalizer_filename = os.path.join(path, NORMALIZER_FILENAME)
         with open(normalizer_filename, 'wb') as f:
             cPickle.dump(normalizer, f)
+
+    if transformer:
+        transformer_filename = os.path.join(path, TRANSFORMER_FILENAME)
+        with open(transformer_filename, 'wb') as f:
+            cPickle.dump(transformer, f)
