@@ -13,6 +13,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.decomposition import PCA
 
 from infernal import shallow_utils
 
@@ -30,6 +32,8 @@ def get_classifier(name, balanced):
         return GradientBoostingClassifier(n_estimators=500,
                                           max_features='sqrt',
                                           learning_rate=0.01)
+    elif name == 'naive-bayes':
+        return GaussianNB()
 
 
 if __name__ == '__main__':
@@ -43,6 +47,8 @@ if __name__ == '__main__':
                         help='Use balanced class weights')
     parser.add_argument('-s', action='store_true', dest='scaler',
                         help='Use scaler (centers and normalizes features)')
+    parser.add_argument('--pca', type=int, dest='pca',
+                        help='Use PCA to reduce data dimensionality to this')
     args = parser.parse_args()
 
     x, y = shallow_utils.load_data(args.train_data)
@@ -52,7 +58,13 @@ if __name__ == '__main__':
     else:
         scaler = None
 
+    if args.pca:
+        pca = PCA(args.pca)
+        x = pca.fit_transform(x)
+    else:
+        pca = None
+
     c = get_classifier(args.classifier, args.balanced)
     c.fit(x, y)
 
-    shallow_utils.save(args.output, c, scaler)
+    shallow_utils.save(args.output, c, scaler, pca)

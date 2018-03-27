@@ -13,12 +13,15 @@ from sklearn.metrics import f1_score
 from infernal import shallow_utils as shallow
 
 
-def evaluate(classifier, normalizer, x, y):
+def evaluate(classifier, normalizer, transformer, x, y):
     """
     Evaluate the performance of the classifier with the given data
     """
     if normalizer is not None:
         x = normalizer.transform(x)
+
+    if transformer is not None:
+        x = transformer.transform(x)
 
     preds = classifier.predict(x)
     acc = np.sum(y == preds) / len(y)
@@ -38,4 +41,5 @@ if __name__ == '__main__':
     x, y = shallow.load_data(args.data)
     classifier = shallow.load_classifier(args.model)
     normalizer = shallow.load_normalizer(args.model)
-    evaluate(classifier, normalizer, x, y)
+    transformer = shallow.load_transformer(args.model)
+    evaluate(classifier, normalizer, transformer, x, y)
