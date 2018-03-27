@@ -44,8 +44,9 @@ def call_corenlp(text, corenlp_depparse_path=None, corenlp_pos_path=None):
     :param corenlp_pos_path: same as above for the POS tagger
     """
     properties = {'tokenize.whitespace': 'true',
-                  'annotators': 'tokenize,ssplit,pos,depparse',
-                  'outputFormat': 'conllu'}
+                  'annotators': 'tokenize,pos,depparse',
+                  'outputFormat': 'conllu',
+                  'ssplit.eolonly': True}
     if corenlp_depparse_path:
         properties['depparse.model'] = corenlp_depparse_path
 
