@@ -21,7 +21,7 @@ def tokenize(text):
     # the order of the patterns is important!!
     # more structured patterns come first
     [a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+|    # emails
-    (?:https?://)?\w+(?:\.\w+)+(?:/\w+)*|                  # URLs
+    (?:https?://)?\w{2,}(?:\.\w{2,})+(?:/\w+)*|                  # URLs
     (?:[\#@]\w+)|                     # Hashtags and twitter user names
     (?:[^\W\d_]\.)+|                  # one letter abbreviations, e.g. E.U.A.
     (?:[DSds][Rr][Aa]?)\.|            # common abbreviations such as dr., sr., sra., dra.
