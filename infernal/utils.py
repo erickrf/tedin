@@ -610,6 +610,23 @@ def create_label_dict(pairs):
     return label_dict
 
 
+def create_dependency_dict(pairs):
+    """
+    Create a dictionary mapping dependency labels (nsubj, dobj, etc) to integers
+    """
+    dep_set = set()
+    for pair in pairs:
+        sent1 = pair.annotated_t
+        sent2 = pair.annotated_h
+        deps1 = [token.dependency_relation for token in sent1.tokens]
+        deps2 = [token.dependency_relation for token in sent2.tokens]
+        dep_set.update(deps1)
+        dep_set.update(deps2)
+
+    dep_dict = {dep: i for i, dep in enumerate(dep_set)}
+    return dep_dict
+
+
 def extract_classes(pairs, label_dict=None):
     """
     Extract the class infomartion (paraphrase, entailment, none, contradiction)
