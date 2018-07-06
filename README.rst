@@ -1,7 +1,30 @@
-Recognizing Textual Entailment
-==============================
+Infernal
+========
 
-This project contains some algorithms for performing the RTE task in Portuguese.
+Infernal (INFERence in NAtural Language) is a model for performing natural
+language inference / recognizing textual entailment based on handcrafted
+features. It was implemented primarily for Portuguese, but most of it can be
+reused for other languages.
+
+Reference
+---------
+
+If you publish research using or expanding on Infernal, please cite:
+
+Erick Fonseca and Sandra M. Aluísio. Syntactic Knowledge for Natural Language
+Inference in Portuguese. In: Proceedings of the 2018 International Conference
+on the Computational Processing of Portuguese (PROPOR). 2018.
+*(accepted for publication)*
+
+```
+@inproceedings{infernal,
+  author = {Erick Fonseca and Sandra M. Alu\'isio},
+  title = {{Syntactic Knowledge for Natural Language Inference in Portuguese}},
+  year = {2018},
+  booktitle = {Proceedings of the 2018 International Conference
+on the Computational Processing of Portuguese (PROPOR)}
+}
+```
 
 Configuration
 -------------
