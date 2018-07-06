@@ -59,9 +59,6 @@ def find_zss_operations(pair, insert_costs, remove_costs, update_costs):
         return remove_costs[node.id - 1]
 
     def get_update_cost(node1, node2):
-        if node1.word_index == node2.word_index and \
-                        node1.dependency_index == node2.dependency_index:
-            return 0
         return update_costs[node1.id - 1, node2.id - 1]
 
     tree_t = pair.annotated_t
@@ -239,18 +236,23 @@ class TreeEditDistanceNetwork(Trainable):
 
         # the cost regularizer penalizes the weights when the cost per operation
         # goes below 1
-        penalty_insert = tf.maximum(
-            tf.cast(self.num_inserts, tf.float32) - costs_insert, 0.)
-        penalty_remove = tf.maximum(
-            tf.cast(self.num_removes, tf.float32) - costs_remove, 0.)
-        penalty_update = tf.maximum(
-            tf.cast(self.num_updates, tf.float32) - costs_update, 0.)
+        # penalty_insert = tf.maximum(
+        #     tf.cast(self.num_inserts, tf.float32) - costs_insert, 0.)
+        # penalty_remove = tf.maximum(
+        #     tf.cast(self.num_removes, tf.float32) - costs_remove, 0.)
+        # penalty_update = tf.maximum(
+        #     tf.cast(self.num_updates, tf.float32) - costs_update, 0.)
+        num_ops = self.num_inserts + self.num_removes + self.num_updates
 
-        penalty_sum = penalty_insert + penalty_remove + penalty_update
-        self.transformation_cost_loss = tf.reduce_mean(penalty_sum) * \
-            self.cost_regularizer
+        # penalty_sum = penalty_insert + penalty_remove + penalty_update
+        # self.transformation_cost_loss = tf.reduce_mean(penalty_sum) * \
+        #     self.cost_regularizer
 
         self.transformation_cost = costs_insert + costs_remove + costs_update
+        penalty = tf.maximum(
+            self.transformation_cost - tf.cast(num_ops, tf.float32), 0.)
+        self.transformation_cost_loss = tf.reduce_mean(penalty) * \
+            self.cost_regularizer
 
     def _define_computation_graph(self, create_optimizer):
         """
@@ -544,7 +546,7 @@ class TreeEditDistanceNetwork(Trainable):
                     inserts.append([a2.word_index, a2.dependency_index])
                 elif op.type == REMOVE:
                     removes.append([a1.word_index, a1.dependency_index])
-                elif op.type == UPDATE or op.type == MATCH:
+                elif op.type == UPDATE:  # or op.type == MATCH:
                     updates1.append([a1.word_index, a1.dependency_index])
                     updates2.append([a2.word_index, a2.dependency_index])
 
