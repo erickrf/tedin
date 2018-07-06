@@ -70,6 +70,16 @@ def find_culprit_features(classifier, normalizer, x, y):
     return inds, wrong_preds, xw_b
 
 
+def load_exceptions(filename):
+    premises = set()
+    with open(filename, 'r') as f:
+        for line in f:
+            if line.startswith('T: '):
+                premises.add(line.replace('T: ', '').strip())
+
+    return premises
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('data', help='Preprocessed data (npz) to evaluate the'
@@ -87,21 +97,21 @@ if __name__ == '__main__':
     fex = fe.FeatureExtractor(both=True)
 
     feature_names = fex.get_feature_names() + ['Bias']
-    inds, wrong_preds, relevances = find_culprit_features(
-        classifier, normalizer, x, y)
+    # inds, wrong_preds, relevances = find_culprit_features(
+    #     classifier, normalizer, x, y)
 
+    inds, preds = get_misclassified_indices(classifier, normalizer, x, y)
     ild = {ind: label for label, ind in ld.items()}
-    for ind, pred, feature_relevances in zip(inds, wrong_preds, relevances):
+    for ind, pred in zip(inds, preds):
         pair = pairs[ind]
         gold_label = pair.entailment.name
         sys_label = ild[pred]
 
-        feature_inds = feature_relevances.argsort()[::-1][:5]
-        relevant_features = [feature_names[i] for i in feature_inds
-                             if feature_relevances[i] > 0]
+        # feature_inds = feature_relevances.argsort()[::-1][:5]
+        # relevant_features = [feature_names[i] for i in feature_inds
+        #                      if feature_relevances[i] > 0]
 
         print('T:', pair.t)
         print('H:', pair.h)
         print('Gold label:', gold_label, '\t\tSystem answer:', sys_label)
-        print('Most relevant fetures:', '\t'.join(relevant_features))
         print()
