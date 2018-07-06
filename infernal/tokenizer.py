@@ -37,11 +37,12 @@ def tokenize(text):
 
     return tokenizer.tokenize(text)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('inputs', nargs='+',
-                        help='Files to tokenize (new files with .token extension '
-                             'will be generated)')
+                        help='Files to tokenize (new files with .token '
+                             'extension will be generated)')
     args = parser.parse_args()
 
     for filename in args.inputs:

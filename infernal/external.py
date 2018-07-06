@@ -57,8 +57,9 @@ def call_corenlp(text, corenlp_depparse_path=None, corenlp_pos_path=None):
     properties_val = json.dumps(properties)
     params = {'properties': properties_val}
 
-    # we encode the URL params using urllib because we need a URL with GET parameters
-    # even though we are making a POST request. The POST data is the text itself.
+    # we encode the URL params using urllib because we need a URL with GET
+    # parameters even though we are making a POST request. The POST data is the
+    # text itself.
     encoded_params = urllib.parse.urlencode(params)
     url = '{url}:{port}/?{params}'.format(url=config.corenlp_url,
                                           port=config.corenlp_port,
