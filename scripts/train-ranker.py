@@ -53,7 +53,7 @@ if __name__ == '__main__':
                         dest='batch')
     parser.add_argument('-f', help='Evaluation frequency', type=int, default=50,
                         dest='eval_frequency')
-    parser.add_argument('-r', help='Opoeration cost regularizer', type=float,
+    parser.add_argument('-r', help='Operation cost regularizer', type=float,
                         default=0, dest='cost_regularizer')
     args = parser.parse_args()
 
