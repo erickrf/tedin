@@ -22,6 +22,12 @@ The code is somewhat hard coded to work with Portuguese data.
 Usage
 -----
 
+Before running any of the scripts, set the environment variable `PYTHONPATH` to include the current directory:
+
+```
+export PYTHONPATH=.
+```
+
 In order to use TEDIN, perform the following steps:
 
 1. Run the `preprocess.py` scripts with XML files containing the data. It will
